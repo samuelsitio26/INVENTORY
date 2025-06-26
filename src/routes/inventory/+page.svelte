@@ -143,6 +143,31 @@
 				outOfStockItems: 0
 			});
 
+			// Update statistik dan status barang
+			const readyThreshold = 5; // threshold stok minimum untuk status Ready
+
+			// Update status pada setiap item
+			stockedItems = stockedItems.map((item) => {
+				let status = 'Ready';
+				if (item.stockIn === 0) {
+					status = 'Out of Stock';
+				} else if (item.stockIn > 0 && item.stockIn <= readyThreshold) {
+					status = 'Low Stock';
+				}
+				return { ...item, status };
+			});
+
+			const readyItems = stockedItems.filter((item) => item.status === 'Ready').length;
+			const lowStockItems = stockedItems.filter((item) => item.status === 'Low Stock').length;
+			const outOfStockItems = stockedItems.filter((item) => item.status === 'Out of Stock').length;
+
+			stockStats.set({
+				totalItems: stockedItems.length,
+				readyItems,
+				lowStockItems,
+				outOfStockItems
+			});
+
 			updatePaginatedItems(mappedItems);
 		} catch (err) {
 			error = err.message;
@@ -286,43 +311,20 @@
 	}
 
 	function editStock(item) {
-		editStockDialog = { show: true, selectedItem: item };
+		editStockDialog = {
+			show: true,
+			selectedItem: {
+				id: item.id,
+				stockIn: item.stockIn,
+				status: item.status // string, bukan object
+			}
+		};
 	}
 
 	async function handleEditStock({ detail }) {
 		try {
 			console.log('handleEditStock detail:', detail);
-			let parentCatId = detail.parent_category;
-			let subCatId = detail.sub_category;
-
-			// Jika sudah ID dan ada di master, langsung pakai
-			if (!parentCategories.some((cat) => cat.id == parentCatId)) {
-				const foundByName = parentCategories.find((cat) => cat.parent_category === parentCatId);
-				if (foundByName) {
-					parentCatId = foundByName.id;
-				} else {
-					console.error('Parent category tidak ditemukan:', parentCatId, parentCategories);
-					parentCatId = null;
-				}
-			}
-			if (!subCategories.some((cat) => cat.id == subCatId)) {
-				const foundByName = subCategories.find((cat) => cat.nama_sub === subCatId);
-				if (foundByName) {
-					subCatId = foundByName.id;
-				} else {
-					console.error('Sub category tidak ditemukan:', subCatId, subCategories);
-					subCatId = null;
-				}
-			}
-
-			console.log('handleEditStock resolved parentCatId:', parentCatId, 'subCatId:', subCatId);
-
-			if (!parentCatId || !subCatId) {
-				throw new Error(
-					'Kategori atau subkategori tidak valid. Cek value yang dikirim dan data master kategori/subkategori.'
-				);
-			}
-
+			// Hanya update stok dan status, status harus string
 			const response = await fetch(
 				`https://directus.eltamaprimaindo.com/items/Barang/${detail.id}`,
 				{
@@ -332,12 +334,9 @@
 						'Content-Type': 'application/json'
 					},
 					body: JSON.stringify({
-						Nama: detail.name,
-						Deskripsi: detail.description,
 						StokIn: detail.stockIn,
-						Status: detail.status,
-						parent_category: parentCatId,
-						sub_category: subCatId
+						Status:
+							typeof detail.status === 'string' ? detail.status : detail.status?.value || 'Unknown'
 					})
 				}
 			);
@@ -351,15 +350,11 @@
 				item.id === detail.id
 					? {
 							...item,
-							name: detail.name,
-							description: detail.description,
 							stockIn: detail.stockIn,
-							status: detail.status,
-							parent_category:
-								parentCategories.find((cat) => cat.id == parentCatId)?.parent_category ||
-								detail.parent_category,
-							sub_category:
-								subCategories.find((cat) => cat.id == subCatId)?.nama_sub || detail.sub_category
+							status:
+								typeof detail.status === 'string'
+									? detail.status
+									: detail.status?.value || 'Unknown'
 						}
 					: item
 			);
