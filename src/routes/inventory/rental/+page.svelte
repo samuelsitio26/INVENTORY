@@ -513,14 +513,12 @@
 		</div>
 	{/if}
 
-	<!-- Main Content -->
+	<!-- Main Content: Split Layout -->
 	{#if loading}
 		<div class="bg-white rounded-lg shadow-sm border border-gray-200">
 			<div class="flex justify-center items-center h-64">
 				<div class="text-center">
-					<div
-						class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"
-					></div>
+					<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
 					<p class="text-gray-600">Memuat data procurement...</p>
 				</div>
 			</div>
@@ -528,315 +526,153 @@
 	{:else if data.length === 0}
 		<div class="bg-white rounded-lg shadow-sm border border-gray-200">
 			<div class="flex flex-col items-center justify-center py-16">
-				<svg
-					class="w-16 h-16 text-gray-400 mb-4"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-					/>
+				<svg class="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
 				</svg>
 				<h3 class="text-lg font-medium text-gray-900 mb-2">Tidak ada data procurement</h3>
-				<p class="text-gray-500 text-center max-w-sm">
-					Belum ada pengajuan peminjaman barang yang perlu disetujui
-				</p>
+				<p class="text-gray-500 text-center max-w-sm">Belum ada pengajuan peminjaman barang yang perlu disetujui</p>
 			</div>
 		</div>
 	{:else if filteredData.length === 0 && $searchTerm}
 		<div class="bg-white rounded-lg shadow-sm border border-gray-200">
 			<div class="flex flex-col items-center justify-center py-16">
-				<svg
-					class="w-16 h-16 text-gray-400 mb-4"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-					/>
+				<svg class="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
 				</svg>
 				<h3 class="text-lg font-medium text-gray-900 mb-2">Tidak ditemukan</h3>
-				<p class="text-gray-500 text-center max-w-sm">
-					Tidak ada data procurement yang cocok dengan pencarian
-					<span class="font-semibold text-blue-600">"{$searchTerm}"</span>
-				</p>
+				<p class="text-gray-500 text-center max-w-sm">Tidak ada data procurement yang cocok dengan pencarian <span class="font-semibold text-blue-600">"{$searchTerm}"</span></p>
 			</div>
 		</div>
 	{:else}
-		<!-- Procurement Cards -->
-		<div class="grid gap-6">
-			{#each filteredData as item, i}
-				<div
-					class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
-				>
-					<!-- Header Card -->
-					<div class="px-6 py-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
-						<div class="flex items-center justify-between">
-							<div class="flex items-center space-x-4">
-								<div class="flex-shrink-0">
-									<div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-										<span class="text-sm font-medium text-blue-600">#{i + 1}</span>
-									</div>
-								</div>
-								<div>
-									<h3 class="text-lg font-semibold text-gray-900">{item.nama}</h3>
-									<p class="text-sm text-gray-600">{item.kategori} - {item.subKategori}</p>
-								</div>
-							</div>
-							<!-- Status Badge -->
-							<span
-								class="px-3 py-1 rounded-full text-xs font-bold tracking-wide border
-								{item.status === 'Pending'
-									? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-									: item.status === 'Approved'
-										? 'bg-blue-100 text-blue-800 border-blue-300'
-										: item.status === 'Dipinjam'
-											? 'bg-orange-100 text-orange-700 border-orange-300'
-											: 'bg-green-100 text-green-800 border-green-300'}"
-							>
-								{getStatusLabel(item)}
-							</span>
+		<!-- Split Layout -->
+		<div class="flex flex-col md:flex-row gap-6 min-h-[500px]">
+			<!-- Sidebar: List Card Barang -->
+			<div class="w-full md:w-1/3 space-y-4">
+				{#each filteredData as item, i}
+					<div
+						class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer px-4 py-3 flex items-center gap-3 {selectedItem && selectedItem.id === item.id ? 'ring-2 ring-blue-400 border-blue-300' : ''}"
+						on:click={() => selectedItem = item}
+					>
+						<div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600">#{i + 1}</div>
+						<div class="flex-1 min-w-0">
+							<div class="font-semibold text-gray-900 truncate">{item.nama}</div>
+							<div class="text-xs text-gray-500 truncate">{item.kategori} - {item.subKategori}</div>
+							<div class="text-xs text-gray-400">Peminjam: {item.peminjam}</div>
 						</div>
+						<span class="ml-auto px-2 py-1 rounded-full text-xs font-bold border {item.status === 'Pending' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : item.status === 'Approved' ? 'bg-blue-100 text-blue-800 border-blue-300' : item.status === 'Dipinjam' ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-green-100 text-green-800 border-green-300'}">{getStatusLabel(item)}</span>
 					</div>
+				{/each}
+			</div>
 
-					<!-- Content Card -->
-					<div class="px-6 py-4">
-						<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-							<!-- Info Section -->
-							<div class="space-y-3">
-								<div>
-									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-										>Departemen</span
-									>
-									<p class="mt-1 text-sm text-gray-900">Inventory</p>
-								</div>
-								<div>
-									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-										>Peminjam</span
-									>
-									<p class="mt-1 text-sm font-medium text-gray-900">{item.peminjam}</p>
-								</div>
-								<div>
-									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-										>Jumlah</span
-									>
-									<p class="mt-1 text-sm font-semibold text-blue-600">{item.qty} Unit</p>
-								</div>
+			<!-- Panel Kanan: Detail Barang -->
+			<div class="w-full md:w-2/3">
+				{#if selectedItem}
+					<!-- Detail Panel -->
+					<div class="bg-white rounded-lg shadow border border-gray-200 p-6 h-full flex flex-col">
+						<div class="flex items-center justify-between mb-4">
+							<h2 class="text-xl font-bold text-gray-900">Detail Barang</h2>
+							<span class="px-3 py-1 rounded-full text-xs font-bold border {selectedItem.status === 'Pending' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : selectedItem.status === 'Approved' ? 'bg-blue-100 text-blue-800 border-blue-300' : selectedItem.status === 'Dipinjam' ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-green-100 text-green-800 border-green-300'}">{getStatusLabel(selectedItem)}</span>
+						</div>
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+							<div>
+								<div class="text-xs text-gray-500 uppercase mb-1">Nama Barang</div>
+								<div class="text-lg font-semibold text-gray-900">{selectedItem.nama}</div>
+								<div class="text-xs text-gray-500 mt-2">Kategori: {selectedItem.kategori} - {selectedItem.subKategori}</div>
+								<div class="text-xs text-gray-500 mt-2">Peminjam: {selectedItem.peminjam}</div>
+								<div class="text-xs text-gray-500 mt-2">Jumlah: <span class="font-bold text-blue-600">{selectedItem.qty} Unit</span></div>
 							</div>
-
-							<!-- Timeline Section -->
-							<div class="space-y-3">
-								<div>
-									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-										>Tanggal Pinjam</span
-									>
-									<p class="mt-1 text-sm text-gray-900">{item.tanggalPinjam}</p>
-								</div>
-								<div>
-									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-										>Jatuh Tempo</span
-									>
-									<p class="mt-1 text-sm font-medium text-red-600">{item.tanggalJatuhTempo}</p>
-								</div>
-								<div>
-									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-										>Durasi</span
-									>
-									<p class="mt-1 text-sm text-gray-900">{item.durasiPinjam}</p>
-								</div>
-							</div>
-
-							<!-- Status Section -->
-							<div class="space-y-3">
-								{#if item.statusPengembalian && item.statusPengembalian.status !== '-'}
-									<div>
-										<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-											>Status Pengembalian</span
-										>
-										<span
-											class="mt-1 inline-block px-2 py-1 rounded-full text-xs font-semibold {item
-												.statusPengembalian.class}"
-										>
-											{item.statusPengembalian.status}
-										</span>
-									</div>
-								{/if}
-								{#if item.kondisiKembali !== '-'}
-									<div>
-										<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-											>Kondisi</span
-										>
-										<span
-											class="mt-1 inline-block px-2 py-1 rounded text-xs font-medium {item.kondisiKembali ===
-											'Baik'
-												? 'bg-green-100 text-green-700'
-												: item.kondisiKembali === 'Rusak'
-													? 'bg-red-100 text-red-700'
-													: 'bg-yellow-100 text-yellow-700'}"
-										>
-											{item.kondisiKembali}
-										</span>
-									</div>
-								{/if}
-								{#if item.tanggalKembaliAktual !== '-'}
-									<div>
-										<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-											>Tgl Kembali</span
-										>
-										<p class="mt-1 text-sm text-gray-900">{item.tanggalKembaliAktual}</p>
-									</div>
+							<div>
+								<div class="text-xs text-gray-500 uppercase mb-1">Tanggal Pinjam</div>
+								<div class="text-sm text-gray-900">{selectedItem.tanggalPinjam}</div>
+								<div class="text-xs text-gray-500 mt-2">Jatuh Tempo: <span class="font-bold text-red-600">{selectedItem.tanggalJatuhTempo}</span></div>
+								<div class="text-xs text-gray-500 mt-2">Durasi: {selectedItem.durasiPinjam}</div>
+								{#if selectedItem.tanggalKembaliAktual !== '-'}
+									<div class="text-xs text-gray-500 mt-2">Tgl Kembali: {selectedItem.tanggalKembaliAktual}</div>
 								{/if}
 							</div>
 						</div>
-
-						<!-- Progress Bar untuk item yang dipinjam -->
-						{#if item.status === 'Dipinjam'}
-							<div class="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-								<div class="flex items-center justify-between mb-2">
-									<span class="text-xs font-medium text-yellow-800">Progress Peminjaman</span>
-									<span class="text-xs text-yellow-600">Menunggu Pengembalian</span>
+						<!-- Status & Kondisi -->
+						<div class="mb-4">
+							{#if selectedItem.statusPengembalian && selectedItem.statusPengembalian.status !== '-'}
+								<div class="mb-2">
+									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Status Pengembalian</span>
+									<span class="ml-2 inline-block px-2 py-1 rounded-full text-xs font-semibold {selectedItem.statusPengembalian.class}">{selectedItem.statusPengembalian.status}</span>
 								</div>
-								<div class="w-full bg-yellow-200 rounded-full h-2">
-									<div class="bg-yellow-500 h-2 rounded-full" style="width: 65%"></div>
+							{/if}
+							{#if selectedItem.kondisiKembali !== '-'}
+								<div class="mb-2">
+									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Kondisi</span>
+									<span class="ml-2 inline-block px-2 py-1 rounded text-xs font-medium {selectedItem.kondisiKembali === 'Baik' ? 'bg-green-100 text-green-700' : selectedItem.kondisiKembali === 'Rusak' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}">{selectedItem.kondisiKembali}</span>
 								</div>
-							</div>
-						{/if}
-
-						<!-- Catatan jika ada -->
-						{#if item.keterangan && item.keterangan !== '-'}
-							<div class="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-								<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
-									>Catatan</span
-								>
-								<p class="mt-1 text-sm text-gray-900">{item.keterangan}</p>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Footer/Actions -->
-					<div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
-						<div class="flex items-center justify-between">
-							<div class="flex items-center space-x-4">
-								<div class="text-xs text-gray-500">
-									ID Procurement: <span class="font-mono">{item.id}</span>
+							{/if}
+							{#if selectedItem.keterangan && selectedItem.keterangan !== '-'}
+								<div class="mb-2">
+									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Catatan</span>
+									<span class="ml-2 text-xs text-gray-700">{selectedItem.keterangan}</span>
 								</div>
-								{#if canUndo(item)}
-									<div class="text-xs text-orange-600 font-medium">
-										Dapat dibatalkan {getUndoCountdown(item)}
-									</div>
-								{/if}
-							</div>
-							<div class="flex space-x-2">
-								{#if canApprove(user, item)}
-									<button
-										class="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
-										on:click={() => handleApprove(item)}
-									>
-										<svg
-											class="w-4 h-4 inline mr-1"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											><path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M5 13l4 4L19 7"
-											/></svg
-										>
-										Approve
-									</button>
-								{:else if item.status === 'Approved'}
-									<button
-										class="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400"
-										on:click={() => handlePinjam(item)}
-									>
-										<svg
-											class="w-4 h-4 inline mr-1"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											><path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M8 17l4 4 4-4m0-5V3"
-											/></svg
-										>
-										Proses Peminjaman
-									</button>
-								{:else if item.status === 'Dipinjam'}
-									<button
-										class="px-3 py-1 text-xs font-semibold text-white bg-orange-500 rounded hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-400"
-										on:click={() => handleReturn(item)}
-									>
-										<svg
-											class="w-4 h-4 inline mr-1"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											><path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-											/></svg
-										>
-										Proses Pengembalian
-									</button>
-								{:else}
-									<button
-										class="px-3 py-1 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
-										on:click={() => handleViewDetail(item)}
-									>
-										<svg
-											class="w-4 h-4 inline mr-1"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											><path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"
-											/></svg
-										>
-										Lihat Detail
-									</button>
-									{#if canUndo(item)}
-										<button
-											class="px-3 py-1 text-xs font-semibold text-white bg-orange-600 rounded hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-											on:click={() => handleUndo(item)}
-										>
-											<svg
-												class="w-4 h-4 inline mr-1"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-												><path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M10 19l-7-7m0 0l7-7m-7 7h18"
-												/></svg
-											>
-											Batalkan
-										</button>
+							{/if}
+						</div>
+						<!-- Approval Flow -->
+						<div class="mb-4">
+							<span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Alur Persetujuan</span>
+							<div class="mt-2 space-y-2">
+								<div class="flex items-center gap-2">
+									<span class="w-2 h-2 rounded-full {selectedItem.approvals?.dept ? 'bg-green-500' : 'bg-gray-300'}"></span>
+									<span class="text-xs">Manager Dept</span>
+									{#if selectedItem.approvals?.dept}
+										<span class="text-xs text-green-600">{selectedItem.approvals.dept.name} ({selectedItem.approvals.dept.by}) - {formatDate(selectedItem.approvals.dept.at)}</span>
+									{:else}
+										<span class="text-xs text-gray-400">Belum disetujui</span>
 									{/if}
-								{/if}
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="w-2 h-2 rounded-full {selectedItem.approvals?.inventory ? 'bg-green-500' : 'bg-gray-300'}"></span>
+									<span class="text-xs">Inventory Manager</span>
+									{#if selectedItem.approvals?.inventory}
+										<span class="text-xs text-green-600">{selectedItem.approvals.inventory.name} ({selectedItem.approvals.inventory.by}) - {formatDate(selectedItem.approvals.inventory.at)}</span>
+									{:else}
+										<span class="text-xs text-gray-400">Belum disetujui</span>
+									{/if}
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="w-2 h-2 rounded-full {selectedItem.approvals?.procurement ? 'bg-green-500' : 'bg-gray-300'}"></span>
+									<span class="text-xs">Procurement Manager</span>
+									{#if selectedItem.approvals?.procurement}
+										<span class="text-xs text-green-600">{selectedItem.approvals.procurement.name} ({selectedItem.approvals.procurement.by}) - {formatDate(selectedItem.approvals.procurement.at)}</span>
+									{:else}
+										<span class="text-xs text-gray-400">Belum disetujui</span>
+									{/if}
+								</div>
 							</div>
 						</div>
+						<!-- Action Buttons -->
+						<div class="flex flex-wrap gap-2 mt-auto">
+							{#if canApprove(user, selectedItem)}
+								<button class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold" on:click={() => handleApprove(selectedItem)}>
+									Approve
+								</button>
+							{:else if selectedItem.status === 'Approved'}
+								<button class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold" on:click={() => handlePinjam(selectedItem)}>
+									Proses Peminjaman
+								</button>
+							{:else if selectedItem.status === 'Dipinjam'}
+								<button class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 text-xs font-semibold" on:click={() => handleReturn(selectedItem)}>
+									Proses Pengembalian
+								</button>
+							{:else}
+								<button class="px-4 py-2 bg-gray-100 text-gray-700 rounded border text-xs font-semibold" disabled>Lihat Detail</button>
+							{/if}
+							{#if canUndo(selectedItem)}
+								<button class="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-semibold" on:click={() => handleUndo(selectedItem)}>
+									Batalkan {getUndoCountdown(selectedItem)}
+								</button>
+							{/if}
+						</div>
 					</div>
-				</div>
-			{/each}
+				{:else}
+					<div class="h-full flex items-center justify-center text-gray-400 text-sm">Pilih barang di sebelah kiri untuk melihat detail</div>
+				{/if}
+			</div>
 		</div>
 	{/if}
 
@@ -1216,31 +1052,31 @@
 								</div>
 							</div>
 						</div>
+
+						<!-- Catatan Tambahan -->
+						{#if detailItem.keterangan && detailItem.keterangan !== '-'}
+							<div class="mt-8 pt-6 border-t border-gray-200">
+								<h3 class="text-lg font-semibold text-gray-900 mb-3">Catatan Tambahan</h3>
+								<div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+									<p class="text-sm text-gray-900">{detailItem.keterangan}</p>
+								</div>
+							</div>
+						{/if}
 					</div>
 
-					<!-- Catatan Tambahan -->
-					{#if detailItem.keterangan && detailItem.keterangan !== '-'}
-						<div class="mt-8 pt-6 border-t border-gray-200">
-							<h3 class="text-lg font-semibold text-gray-900 mb-3">Catatan Tambahan</h3>
-							<div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-								<p class="text-sm text-gray-900">{detailItem.keterangan}</p>
+					<!-- Footer -->
+					<div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+						<div class="flex justify-between items-center">
+							<div class="text-xs text-gray-500">
+								ID Procurement: <span class="font-mono text-gray-700">{detailItem.id}</span>
 							</div>
+							<button
+								class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+								on:click={closeDetailModal}
+							>
+								Tutup
+							</button>
 						</div>
-					{/if}
-				</div>
-
-				<!-- Footer -->
-				<div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
-					<div class="flex justify-between items-center">
-						<div class="text-xs text-gray-500">
-							ID Procurement: <span class="font-mono text-gray-700">{detailItem.id}</span>
-						</div>
-						<button
-							class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-							on:click={closeDetailModal}
-						>
-							Tutup
-						</button>
 					</div>
 				</div>
 			</div>
