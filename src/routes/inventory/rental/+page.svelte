@@ -425,7 +425,10 @@
 	let filterSearch = '';
 </script>
 
-<div class="mx-auto px-4 py-8" style="max-width:1600px; font-size:1.1rem;">
+<div
+	class="mx-auto px-4 py-8"
+	style="max-width:1600px; font-size:1.1rem; margin-left:-50px; margin-right:-50px;"
+>
 	<!-- Header -->
 	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
 		<div>
