@@ -357,20 +357,41 @@
 	}
 
 	// Filter data rental sesuai searchTerm global
-	$: filteredData = !$searchTerm
-		? data
-		: data.filter((item) => {
-				const search = $searchTerm.toLowerCase();
-				return (
-					item.nama?.toLowerCase().includes(search) ||
-					item.kategori?.toLowerCase().includes(search) ||
-					item.subKategori?.toLowerCase().includes(search) ||
-					item.peminjam?.toLowerCase().includes(search) ||
-					item.status?.toLowerCase().includes(search) ||
-					item.tanggalPinjam?.toLowerCase().includes(search) ||
-					item.tanggalJatuhTempo?.toLowerCase().includes(search)
-				);
-			});
+	$: filteredData = data.filter((item) => {
+		// Filter tanggal pinjam
+		let passDate = true;
+		if (filterStartDate) {
+			const [d, m, y] = item.tanggalPinjam.split('-');
+			const tgl = new Date(`${y}-${m}-${d}`);
+			passDate = passDate && tgl >= new Date(filterStartDate);
+		}
+		if (filterEndDate) {
+			const [d, m, y] = item.tanggalPinjam.split('-');
+			const tgl = new Date(`${y}-${m}-${d}`);
+			passDate = passDate && tgl <= new Date(filterEndDate);
+		}
+		// Filter status
+		let passStatus = !filterStatus || getStatusLabel(item) === filterStatus;
+		// Filter search
+		let search = filterSearch.toLowerCase();
+		let passSearch =
+			!search ||
+			item.nama?.toLowerCase().includes(search) ||
+			item.kategori?.toLowerCase().includes(search) ||
+			item.subKategori?.toLowerCase().includes(search) ||
+			item.peminjam?.toLowerCase().includes(search);
+		return passDate && passStatus && passSearch;
+	});
+
+	function getStatusBadgeClass(status) {
+		if (status === 'Pending') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+		if (status === 'Dept Approved') return 'bg-purple-100 text-purple-800 border-purple-300';
+		if (status === 'Inventory Approved') return 'bg-indigo-100 text-indigo-800 border-indigo-300';
+		if (status === 'Approved') return 'bg-green-100 text-green-800 border-green-300';
+		if (status === 'Dipinjam') return 'bg-blue-100 text-blue-800 border-blue-300';
+		if (status === 'Dikembalikan') return 'bg-gray-100 text-gray-700 border-gray-300';
+		return 'bg-gray-100 text-gray-700 border-gray-300';
+	}
 
 	// Hitung barang yang sudah terlambat (status Dipinjam, jatuh tempo < hari ini)
 	$: lateItems = data.filter((item) => {
@@ -397,243 +418,182 @@
 		if (stage === 'done') return 'Approved';
 		return 'Pending';
 	}
+
+	let filterStartDate = '';
+	let filterEndDate = '';
+	let filterStatus = '';
+	let filterSearch = '';
 </script>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-	<!-- Header dengan Filter + Notification Bell -->
-	<div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-		<div class="p-6">
-			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
-				<div class="flex items-center gap-4">
-					<div>
-						<h1 class="text-2xl font-bold text-gray-900">Procurement Peminjaman Barang</h1>
-						<p class="mt-1 text-sm text-gray-600">
-							Status procurement dan persetujuan peminjaman alat
-						</p>
-					</div>
-				</div>
-				<!-- Notification Bell di kanan header -->
-				<div class="flex items-center gap-4 mt-4 sm:mt-0"></div>
-			</div>
-
-			<!-- Search Bar -->
-			<div class="flex flex-col sm:flex-row gap-4">
-				<div class="flex-1">
-					<input
-						type="text"
-						placeholder="Cari procurement..."
-						class="w-full border border-gray-300 rounded-md px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-					/>
-				</div>
-				<div class="flex space-x-2">
-					<button
-						class="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 transition-colors"
-					>
-						Aksi Procurement
-					</button>
-					<button
-						class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition-colors"
-					>
-						Refresh
-					</button>
-				</div>
-			</div>
+<div class="mx-auto px-4 py-8" style="max-width:1600px; font-size:1.1rem;">
+	<!-- Header -->
+	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+		<div>
+			<h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">
+				Procurement Peminjaman Barang
+			</h1>
+			<p class="mt-1 text-sm text-gray-500">Status procurement dan persetujuan peminjaman alat</p>
+		</div>
+		<div class="flex gap-2 mt-4 sm:mt-0">
+			<button
+				class="px-5 py-3 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors shadow"
+				>Aksi Peminjaman</button
+			>
+			<button
+				class="px-5 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow"
+				>Refresh</button
+			>
 		</div>
 	</div>
 
-	<!-- Error message -->
-	{#if error}
-		<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-6">
-			<div class="flex items-start">
-				<div class="flex-shrink-0">
-					<svg class="h-5 w-5 text-red-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
-						<path
-							fill-rule="evenodd"
-							d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-							clip-rule="evenodd"
+	<div class="bg-white rounded-2xl shadow border border-gray-200 px-4 py-8 min-h-[520px]">
+		<div class="flex flex-row gap-8 xl:gap-12">
+			<!-- Panel Kiri: Daftar Peminjaman -->
+			<div
+				class="flex flex-col h-full min-h-0"
+				style="width:38%; min-width:420px; max-width:520px;"
+			>
+				<!-- Filter & Search (tetap di atas, tidak ikut scroll) -->
+				<div class="flex flex-col gap-4 mb-4">
+					<div class="flex flex-wrap gap-3 items-center">
+						<input
+							type="date"
+							bind:value={filterStartDate}
+							class="border border-gray-300 rounded-md px-3 py-2 text-base focus:ring-2 focus:ring-blue-500"
+							placeholder="Dari"
+							style="width: 170px;"
 						/>
-					</svg>
-				</div>
-				<div class="ml-3">
-					<h3 class="text-sm font-medium text-red-800">Error mengambil data</h3>
-					<p class="text-sm mt-1">{error}</p>
-					<p class="text-xs mt-2 text-red-600">
-						Silakan periksa koneksi internet atau coba refresh halaman. Jika masalah berlanjut,
-						hubungi administrator.
-					</p>
-					<button
-						class="mt-2 px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
-						on:click={() => window.location.reload()}
-					>
-						Refresh Halaman
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Main Content: Split Layout -->
-	{#if loading}
-		<div class="bg-white rounded-lg shadow-sm border border-gray-200">
-			<div class="flex justify-center items-center h-64">
-				<div class="text-center">
-					<div
-						class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"
-					></div>
-					<p class="text-gray-600">Memuat data procurement...</p>
-				</div>
-			</div>
-		</div>
-	{:else if data.length === 0}
-		<div class="bg-white rounded-lg shadow-sm border border-gray-200">
-			<div class="flex flex-col items-center justify-center py-16">
-				<svg
-					class="w-16 h-16 text-gray-400 mb-4"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-					/>
-				</svg>
-				<h3 class="text-lg font-medium text-gray-900 mb-2">Tidak ada data procurement</h3>
-				<p class="text-gray-500 text-center max-w-sm">
-					Belum ada pengajuan peminjaman barang yang perlu disetujui
-				</p>
-			</div>
-		</div>
-	{:else if filteredData.length === 0 && $searchTerm}
-		<div class="bg-white rounded-lg shadow-sm border border-gray-200">
-			<div class="flex flex-col items-center justify-center py-16">
-				<svg
-					class="w-16 h-16 text-gray-400 mb-4"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-					/>
-				</svg>
-				<h3 class="text-lg font-medium text-gray-900 mb-2">Tidak ditemukan</h3>
-				<p class="text-gray-500 text-center max-w-sm">
-					Tidak ada data procurement yang cocok dengan pencarian <span
-						class="font-semibold text-blue-600">"{$searchTerm}"</span
-					>
-				</p>
-			</div>
-		</div>
-	{:else}
-		<!-- Split Layout -->
-		<div class="flex flex-col md:flex-row gap-6 min-h-[500px]">
-			<!-- Sidebar: List Card Barang -->
-			<div class="w-full md:w-1/3 space-y-4">
-				{#each filteredData as item, i}
-					<div
-						class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer px-4 py-3 flex items-center gap-3 {selectedItem &&
-						selectedItem.id === item.id
-							? 'ring-2 ring-blue-400 border-blue-300'
-							: ''}"
-						on:click={() => (selectedItem = item)}
-					>
-						<div
-							class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600"
+						<span class="text-gray-400">-</span>
+						<input
+							type="date"
+							bind:value={filterEndDate}
+							class="border border-gray-300 rounded-md px-3 py-2 text-base focus:ring-2 focus:ring-blue-500"
+							placeholder="Sampai"
+							style="width: 170px;"
+						/>
+						<select
+							bind:value={filterStatus}
+							class="border border-gray-300 rounded-md px-3 py-2 text-base focus:ring-2 focus:ring-blue-500"
 						>
-							#{i + 1}
-						</div>
-						<div class="flex-1 min-w-0">
-							<div class="font-semibold text-gray-900 truncate">{item.nama}</div>
-							<div class="text-xs text-gray-500 truncate">{item.kategori} - {item.subKategori}</div>
-							<div class="text-xs text-gray-400">Peminjam: {item.peminjam}</div>
-						</div>
-						<span
-							class="ml-auto px-2 py-1 rounded-full text-xs font-bold border {item.status ===
-							'Pending'
-								? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-								: item.status === 'Approved'
-									? 'bg-blue-100 text-blue-800 border-blue-300'
-									: item.status === 'Dipinjam'
-										? 'bg-orange-100 text-orange-700 border-orange-300'
-										: 'bg-green-100 text-green-800 border-green-300'}">{getStatusLabel(item)}</span
-						>
+							<option value="">Semua Status</option>
+							<option value="Pending">Pending</option>
+							<option value="Dept Approved">Dept Approved</option>
+							<option value="Inventory Approved">Inventory Approved</option>
+							<option value="Approved">Approved</option>
+							<option value="Dipinjam">Dipinjam</option>
+							<option value="Dikembalikan">Dikembalikan</option>
+						</select>
+						<input
+							type="text"
+							bind:value={filterSearch}
+							placeholder="Cari barang/peminjam..."
+							class="flex-1 border border-gray-300 rounded-md px-3 py-2 text-base focus:ring-2 focus:ring-blue-500"
+						/>
 					</div>
-				{/each}
+				</div>
+				<!-- List Card: area scrollable -->
+				<div class="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar">
+					<div class="space-y-3">
+						{#each filteredData as item, i}
+							<div
+								class="flex items-center bg-white shadow-sm rounded-lg border border-gray-200 px-6 py-4 gap-4 cursor-pointer hover:shadow-md transition-all procurement-card {selectedItem &&
+								selectedItem.id === item.id
+									? 'ring-2 ring-blue-400 border-blue-300'
+									: ''}"
+								on:click={() => (selectedItem = item)}
+							>
+								<div
+									class="w-10 h-10 flex items-center justify-center rounded-full font-bold text-lg bg-blue-50 text-blue-600 border border-blue-200"
+								>
+									#{i + 1}
+								</div>
+								<div class="flex-1 min-w-0">
+									<div class="font-bold text-gray-900 truncate text-base">{item.nama}</div>
+									<div class="text-sm text-gray-500 truncate">
+										{item.kategori} &bull; Peminjam: {item.peminjam}
+									</div>
+								</div>
+								<span
+									class="ml-auto px-3 py-1 rounded-full text-base font-bold border status-badge {getStatusBadgeClass(
+										getStatusLabel(item)
+									)}">{getStatusLabel(item)}</span
+								>
+							</div>
+						{/each}
+					</div>
+				</div>
 			</div>
 
-			<!-- Panel Kanan: Detail Barang -->
-			<div class="w-full md:w-2/3">
+			<!-- Panel Kanan: Detail Peminjaman -->
+			<div
+				class="flex flex-col h-full min-h-0 overflow-y-auto"
+				style="width:62%; min-width:520px; max-width:900px; margin-left:-4px; margin-right:-4px;"
+			>
 				{#if selectedItem}
-					<!-- Detail Panel -->
-					<div class="bg-white rounded-lg shadow border border-gray-200 p-6 h-full flex flex-col">
-						<div class="flex items-center justify-between mb-4">
-							<h2 class="text-xl font-bold text-gray-900">Detail Barang</h2>
+					<div
+						class="bg-blue-50 rounded-2xl shadow border-2 border-blue-200 p-12 flex flex-col gap-8"
+						style="margin-left:-4px; margin-right:-4px;"
+					>
+						<div class="flex items-center justify-between mb-6">
+							<h2 class="text-2xl font-extrabold text-gray-900">Detail Barang</h2>
 							<span
-								class="px-3 py-1 rounded-full text-xs font-bold border {selectedItem.status ===
+								class="px-4 py-2 rounded-full text-lg font-bold border {selectedItem.status ===
 								'Pending'
-									? 'bg-yellow-100 text-yellow-800 border-yellow-300'
+									? 'bg-yellow-100 text-yellow-800'
 									: selectedItem.status === 'Approved'
-										? 'bg-blue-100 text-blue-800 border-blue-300'
+										? 'bg-green-100 text-green-800'
 										: selectedItem.status === 'Dipinjam'
-											? 'bg-orange-100 text-orange-700 border-orange-300'
-											: 'bg-green-100 text-green-800 border-green-300'}"
-								>{getStatusLabel(selectedItem)}</span
+											? 'bg-blue-100 text-blue-800'
+											: 'bg-gray-100 text-gray-700'}">{getStatusLabel(selectedItem)}</span
 							>
 						</div>
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-							<div>
-								<div class="text-xs text-gray-500 uppercase mb-1">Nama Barang</div>
-								<div class="text-lg font-semibold text-gray-900">{selectedItem.nama}</div>
-								<div class="text-xs text-gray-500 mt-2">
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+							<div class="space-y-4">
+								<div class="text-base text-gray-500 uppercase">Nama Barang</div>
+								<div class="font-bold text-gray-900 text-xl">{selectedItem.nama}</div>
+								<div class="text-base text-gray-500">
 									Kategori: {selectedItem.kategori} - {selectedItem.subKategori}
 								</div>
-								<div class="text-xs text-gray-500 mt-2">Peminjam: {selectedItem.peminjam}</div>
-								<div class="text-xs text-gray-500 mt-2">
+								<div class="text-base text-gray-500">Peminjam: {selectedItem.peminjam}</div>
+								<div class="text-base text-gray-500">
 									Jumlah: <span class="font-bold text-blue-600">{selectedItem.qty} Unit</span>
 								</div>
 							</div>
-							<div>
-								<div class="text-xs text-gray-500 uppercase mb-1">Tanggal Pinjam</div>
-								<div class="text-sm text-gray-900">{selectedItem.tanggalPinjam}</div>
-								<div class="text-xs text-gray-500 mt-2">
+							<div class="space-y-4">
+								<div class="text-base text-gray-500 uppercase">Tanggal Pinjam</div>
+								<div class="text-lg text-gray-900">{selectedItem.tanggalPinjam}</div>
+								<div class="text-base text-gray-500">
 									Jatuh Tempo: <span class="font-bold text-red-600"
 										>{selectedItem.tanggalJatuhTempo}</span
 									>
 								</div>
-								<div class="text-xs text-gray-500 mt-2">Durasi: {selectedItem.durasiPinjam}</div>
+								<div class="text-base text-gray-500">Durasi: {selectedItem.durasiPinjam}</div>
 								{#if selectedItem.tanggalKembaliAktual !== '-'}
-									<div class="text-xs text-gray-500 mt-2">
+									<div class="text-base text-gray-500">
 										Tgl Kembali: {selectedItem.tanggalKembaliAktual}
 									</div>
 								{/if}
 							</div>
 						</div>
-						<!-- Status & Kondisi -->
-						<div class="mb-4">
+						<div class="flex flex-col gap-3">
 							{#if selectedItem.statusPengembalian && selectedItem.statusPengembalian.status !== '-'}
-								<div class="mb-2">
-									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
+								<div>
+									<span class="text-base font-medium text-gray-500 uppercase tracking-wide"
 										>Status Pengembalian</span
 									>
 									<span
-										class="ml-2 inline-block px-2 py-1 rounded-full text-xs font-semibold {selectedItem
+										class="ml-2 inline-block px-3 py-2 rounded-full text-base font-semibold {selectedItem
 											.statusPengembalian.class}">{selectedItem.statusPengembalian.status}</span
 									>
 								</div>
 							{/if}
 							{#if selectedItem.kondisiKembali !== '-'}
-								<div class="mb-2">
-									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
+								<div>
+									<span class="text-base font-medium text-gray-500 uppercase tracking-wide"
 										>Kondisi</span
 									>
 									<span
-										class="ml-2 inline-block px-2 py-1 rounded text-xs font-medium {selectedItem.kondisiKembali ===
+										class="ml-2 inline-block px-3 py-2 rounded text-base font-medium {selectedItem.kondisiKembali ===
 										'Baik'
 											? 'bg-green-100 text-green-700'
 											: selectedItem.kondisiKembali === 'Rusak'
@@ -643,27 +603,30 @@
 								</div>
 							{/if}
 							{#if selectedItem.keterangan && selectedItem.keterangan !== '-'}
-								<div class="mb-2">
-									<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
+								<div>
+									<span class="text-base font-medium text-gray-500 uppercase tracking-wide"
 										>Catatan</span
 									>
-									<span class="ml-2 text-xs text-gray-700">{selectedItem.keterangan}</span>
+									<span class="ml-2 text-base text-gray-700">{selectedItem.keterangan}</span>
 								</div>
 							{/if}
 						</div>
-						<!-- Approval Flow -->
-						<div class="mb-4">
-							<span class="text-xs font-medium text-gray-500 uppercase tracking-wide"
+						<!-- Approval Progress -->
+						<div class="mb-6">
+							<span class="text-base font-medium text-gray-500 uppercase tracking-wide"
 								>Alur Persetujuan</span
 							>
-							<div class="mt-2 space-y-2">
-								<div class="flex items-center gap-2">
-									<span
-										class="w-2 h-2 rounded-full {selectedItem.approvals?.dept
-											? 'bg-green-500'
-											: 'bg-gray-300'}"
-									></span>
-									<span class="text-xs">Manager Dept</span>
+							<div class="mt-4 space-y-4">
+								<div class="flex items-center gap-3">
+									<div
+										class="w-6 h-6 rounded-full flex items-center justify-center {selectedItem
+											.approvals?.dept
+											? 'bg-green-500 text-white'
+											: 'bg-gray-200 text-gray-400'} font-bold"
+									>
+										1
+									</div>
+									<span class="text-xs font-semibold">Manager Dept</span>
 									{#if selectedItem.approvals?.dept}
 										<span class="text-xs text-green-600"
 											>{selectedItem.approvals.dept.name} ({selectedItem.approvals.dept.by}) - {formatDate(
@@ -674,87 +637,97 @@
 										<span class="text-xs text-gray-400">Belum disetujui</span>
 									{/if}
 								</div>
-								<div class="flex items-center gap-2">
-									<span
-										class="w-2 h-2 rounded-full {selectedItem.approvals?.inventory
-											? 'bg-green-500'
-											: 'bg-gray-300'}"
-									></span>
-									<span class="text-xs">Inventory Manager</span>
+								<div class="flex items-center gap-3">
+									<div
+										class="w-6 h-6 rounded-full flex items-center justify-center {selectedItem
+											.approvals?.inventory
+											? 'bg-green-500 text-white'
+											: 'bg-gray-200 text-gray-400'} font-bold"
+									>
+										2
+									</div>
+									<span class="text-xs font-semibold">Inventory Manager</span>
 									{#if selectedItem.approvals?.inventory}
-										<span class="text-xs text-green-600">
-											{selectedItem.approvals.inventory?.name} ({selectedItem.approvals.inventory
-												?.by}) - {formatDate(selectedItem.approvals.inventory?.at)}
-										</span>
+										<span class="text-xs text-green-600"
+											>{selectedItem.approvals.inventory?.name} ({selectedItem.approvals.inventory
+												?.by}) - {formatDate(selectedItem.approvals.inventory?.at)}</span
+										>
 									{:else}
 										<span class="text-xs text-gray-400">Belum disetujui</span>
 									{/if}
 								</div>
-								<div class="flex items-center gap-2">
-									<span
-										class="w-2 h-2 rounded-full {selectedItem.approvals?.procurement
-											? 'bg-green-500'
-											: 'bg-gray-300'}"
-									></span>
-									<span class="text-xs">Procurement Manager</span>
+								<div class="flex items-center gap-3">
+									<div
+										class="w-6 h-6 rounded-full flex items-center justify-center {selectedItem
+											.approvals?.procurement
+											? 'bg-green-500 text-white'
+											: 'bg-gray-200 text-gray-400'} font-bold"
+									>
+										3
+									</div>
+									<span class="text-xs font-semibold">Procurement Manager</span>
 									{#if selectedItem.approvals?.procurement}
-										<span class="text-xs text-green-600">
-											{selectedItem.approvals.procurement?.name} ({selectedItem.approvals
-												.procurement?.by}) - {formatDate(selectedItem.approvals.procurement?.at)}
-										</span>
+										<span class="text-xs text-green-600"
+											>{selectedItem.approvals.procurement?.name} ({selectedItem.approvals
+												.procurement?.by}) - {formatDate(
+												selectedItem.approvals.procurement?.at
+											)}</span
+										>
 									{:else}
 										<span class="text-xs text-gray-400">Belum disetujui</span>
 									{/if}
 								</div>
 							</div>
 						</div>
-						<!-- Action Buttons -->
-						<div class="flex flex-wrap gap-2 mt-auto">
+						<!-- Tombol Aksi -->
+						<div class="flex flex-wrap gap-3 mt-8">
 							{#if canApprove(user, selectedItem)}
 								<button
-									class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
-									on:click={() => handleApprove(selectedItem)}
+									class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-semibold shadow"
+									on:click={() => handleApprove(selectedItem)}>Approve</button
 								>
-									Approve
-								</button>
 							{:else if selectedItem.status === 'Approved'}
 								<button
-									class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold"
-									on:click={() => handlePinjam(selectedItem)}
+									class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-semibold shadow"
+									on:click={() => handlePinjam(selectedItem)}>Proses Peminjaman</button
 								>
-									Proses Peminjaman
-								</button>
 							{:else if selectedItem.status === 'Dipinjam'}
 								<button
-									class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 text-xs font-semibold"
-									on:click={() => handleReturn(selectedItem)}
+									class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-xs font-semibold shadow"
+									on:click={() => handleReturn(selectedItem)}>Proses Pengembalian</button
 								>
-									Proses Pengembalian
-								</button>
 							{:else}
 								<button
-									class="px-4 py-2 bg-gray-100 text-gray-700 rounded border text-xs font-semibold"
+									class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg border text-xs font-semibold shadow"
 									disabled>Lihat Detail</button
 								>
 							{/if}
 							{#if canUndo(selectedItem)}
 								<button
-									class="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-semibold"
+									class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-xs font-semibold shadow"
 									on:click={() => handleUndo(selectedItem)}
+									>Batalkan {getUndoCountdown(selectedItem)}</button
 								>
-									Batalkan {getUndoCountdown(selectedItem)}
-								</button>
 							{/if}
+							<!-- Tombol Edit & Batalkan -->
+							<button
+								class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg border text-xs font-semibold shadow"
+								>Edit Peminjaman</button
+							>
+							<button
+								class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs font-semibold shadow"
+								>Batalkan Peminjaman</button
+							>
 						</div>
 					</div>
 				{:else}
-					<div class="h-full flex items-center justify-center text-gray-400 text-sm">
+					<div class="h-full flex items-center justify-center text-gray-400 text-lg">
 						Pilih barang di sebelah kiri untuk melihat detail
 					</div>
 				{/if}
 			</div>
 		</div>
-	{/if}
+	</div>
 
 	<!-- Dialog Konfirmasi -->
 	{#if showConfirm}
@@ -1172,6 +1145,22 @@
 		transform: translateY(-2px);
 	}
 
+	/* Custom scrollbar for card list */
+	.custom-scrollbar {
+		scrollbar-width: thin;
+		scrollbar-color: #a0aec0 #f7fafc;
+	}
+	.custom-scrollbar::-webkit-scrollbar {
+		width: 8px;
+	}
+	.custom-scrollbar::-webkit-scrollbar-thumb {
+		background: #cbd5e1;
+		border-radius: 6px;
+	}
+	.custom-scrollbar::-webkit-scrollbar-track {
+		background: #f7fafc;
+	}
+
 	/* Progress bar animation */
 	@keyframes progress {
 		0% {
@@ -1208,35 +1197,42 @@
 	}
 
 	/* Responsive improvements */
+	@media (max-width: 1200px) {
+		.flex-row {
+			flex-direction: column !important;
+		}
+		/* Panel lebar penuh jika layar kecil */
+		div[style*='width:38%'],
+		div[style*='width:62%'] {
+			min-width: 0 !important;
+			max-width: 100% !important;
+			width: 100% !important;
+		}
+	}
 	@media (max-width: 768px) {
-		.procurement-card {
-			margin-bottom: 1rem;
+		.max-w-screen-xl {
+			padding: 0.5rem !important;
+			font-size: 1rem !important;
 		}
-
-		.grid-cols-1.md\\:grid-cols-3 {
-			grid-template-columns: 1fr;
-			gap: 1rem;
+		.bg-white.rounded-2xl.shadow.border {
+			padding: 1rem !important;
 		}
-	}
-
-	/* Modal backdrop blur effect */
-	.modal-backdrop {
-		backdrop-filter: blur(4px);
-	}
-
-	/* Timeline styles */
-	.timeline-item {
-		position: relative;
-	}
-
-	.timeline-item:not(:last-child)::after {
-		content: '';
-		position: absolute;
-		left: 0.375rem;
-		top: 1.5rem;
-		width: 2px;
-		height: 2rem;
-		background: linear-gradient(to bottom, currentColor, transparent);
-		opacity: 0.3;
+		.p-10,
+		.p-12 {
+			padding: 1.5rem !important;
+		}
+		.gap-8,
+		.gap-10,
+		.gap-12,
+		.xl\:gap-16 {
+			gap: 1.2rem !important;
+		}
+		.md\:w-\[40\%\],
+		.md\:w-\[60\%\],
+		.xl\:w-\[42\%\],
+		.xl\:w-\[58\%\] {
+			width: 100% !important;
+			max-width: 100% !important;
+		}
 	}
 </style>
