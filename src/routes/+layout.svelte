@@ -2,6 +2,7 @@
 <script>
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { searchTerm } from '$lib/stores/search.js';
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -37,6 +38,10 @@
 			localStorage.removeItem('user_role');
 			window.location.href = '/login';
 		}
+	}
+
+	function clearSearch() {
+		searchTerm.set('');
 	}
 </script>
 
@@ -261,26 +266,49 @@
 					<!-- Right Side - Quick Actions -->
 					<div class="flex items-center space-x-4">
 						<!-- Quick Search -->
-						<div
-							class="hidden md:flex items-center bg-gray-100/80 px-4 py-2 rounded-xl border border-gray-200/50 hover:bg-gray-200/80 transition-all duration-300 group"
-						>
-							<svg
-								class="w-5 h-5 text-gray-400 mr-2 group-hover:text-gray-600 transition-colors duration-300"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-								></path>
-							</svg>
-							<span
-								class="text-gray-500 text-sm font-medium group-hover:text-gray-700 transition-colors duration-300"
-								>Quick Search</span
-							>
+						<div class="hidden md:flex flex-col justify-center w-72">
+							<label class="sr-only">Pencarian Barang</label>
+							<div class="relative">
+								<input
+									type="text"
+									placeholder="Cari di semua tabel: nama barang, kategori, departemen, status, deskripsi..."
+									class="w-full p-2 pl-10 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm shadow-sm"
+									bind:value={$searchTerm}
+								/>
+								<!-- Search Icon -->
+								<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+									<svg
+										class="h-5 w-5 text-gray-400"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+										/>
+									</svg>
+								</div>
+								<!-- Clear Button -->
+								{#if $searchTerm}
+									<button
+										on:click={clearSearch}
+										class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+										type="button"
+									>
+										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M6 18L18 6M6 6l12 12"
+											/>
+										</svg>
+									</button>
+								{/if}
+							</div>
 						</div>
 
 						<!-- Notification Bell -->

@@ -6,6 +6,7 @@
 	import AddToStockDialog from '$lib/components/inventory/confirm/AddToStockDialog.svelte';
 	import EditStockDialog from '$lib/components/inventory/confirm/EditStockDialog.svelte';
 	import { stockStore, stockStats } from '$lib/stores/inventory.js';
+	import { searchTerm } from '$lib/stores/search.js';
 
 	let loading = false;
 	let error = null;
@@ -30,7 +31,6 @@
 	let addedToStockIds = [];
 
 	let showRentalDropdown = false;
-	let searchTerm = '';
 
 	// State paginasi untuk Barang di Stok
 	let currentStockPage = 1;
@@ -380,7 +380,7 @@
 
 	// Clear search function
 	function clearSearch() {
-		searchTerm = '';
+		searchTerm.set('');
 	}
 
 	onMount(loadData);
@@ -390,8 +390,8 @@
 
 	// Filter untuk Barang di Stok
 	$: filteredStockedItems = stockedItems.filter((item) => {
-		if (!searchTerm) return true;
-		const search = searchTerm.toLowerCase();
+		if (!$searchTerm) return true;
+		const search = $searchTerm.toLowerCase();
 		return (
 			item.name?.toLowerCase().includes(search) ||
 			item.parent_category?.toLowerCase().includes(search) ||
@@ -407,11 +407,11 @@
 		(item) =>
 			!stockedItems.some((stock) => stock.name === item.name) &&
 			!addedToStockIds.includes(item.id) &&
-			(!searchTerm ||
-				item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.units?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.quantity?.toString().includes(searchTerm.toLowerCase()))
+			(!$searchTerm ||
+				item.name?.toLowerCase().includes($searchTerm.toLowerCase()) ||
+				item.department?.toLowerCase().includes($searchTerm.toLowerCase()) ||
+				item.units?.toLowerCase().includes($searchTerm.toLowerCase()) ||
+				item.quantity?.toString().includes($searchTerm.toLowerCase()))
 	);
 
 	// Update total items berdasarkan hasil filter
@@ -521,7 +521,7 @@
 		<div class="relative">
 			<input
 				type="text"
-				bind:value={searchTerm}
+				bind:value={$searchTerm}
 				placeholder="Cari di semua tabel: nama barang, kategori, departemen, status, deskripsi..."
 				class="w-full p-3 pl-10 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
 			/>
@@ -537,7 +537,7 @@
 				</svg>
 			</div>
 			<!-- Clear Button -->
-			{#if searchTerm}
+			{#if $searchTerm}
 				<button
 					on:click={clearSearch}
 					class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
@@ -553,9 +553,9 @@
 				</button>
 			{/if}
 		</div>
-		{#if searchTerm}
+		{#if $searchTerm}
 			<div class="mt-2 text-sm text-gray-600">
-				Hasil pencarian untuk: "<span class="font-semibold">{searchTerm}</span>" - Barang di Stok: {filteredStockedItems.length},
+				Hasil pencarian untuk: "<span class="font-semibold">{$searchTerm}</span>" - Barang di Stok: {filteredStockedItems.length},
 				Barang Diterima: {totalFilteredItems}
 			</div>
 		{/if}
@@ -776,7 +776,7 @@
 								filteredStockedItems.length
 							)} - {Math.min(currentStockPage * stockItemsPerPage, filteredStockedItems.length)} dari
 							{filteredStockedItems.length} barang
-							{#if searchTerm}
+							{#if $searchTerm}
 								<span class="text-blue-600">(hasil pencarian)</span>
 							{/if}
 						</div>
@@ -834,8 +834,8 @@
 						</svg>
 					</div>
 					<p class="text-gray-600">
-						{searchTerm
-							? `Tidak ada barang di stok yang cocok dengan pencarian "${searchTerm}"`
+						{$searchTerm
+							? `Tidak ada barang di stok yang cocok dengan pencarian "${$searchTerm}"`
 							: 'Tidak ada barang di stok.'}
 					</p>
 				</div>
@@ -860,7 +860,7 @@
 							currentPage * itemsPerPage,
 							totalFilteredItems
 						)} dari {totalFilteredItems} barang
-						{#if searchTerm}
+						{#if $searchTerm}
 							<span class="text-blue-600">(hasil pencarian)</span>
 						{/if}
 					</div>
@@ -903,7 +903,7 @@
 						</button>
 					</div>
 				</div>
-			{:else if searchTerm}
+			{:else if $searchTerm}
 				<div class="bg-white rounded-lg shadow p-8 text-center">
 					<div class="text-gray-400 mb-4">
 						<svg class="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">

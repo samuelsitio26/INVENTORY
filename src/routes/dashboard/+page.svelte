@@ -134,12 +134,12 @@
 	}
 </script>
 
-<section class="py-10 text-center">
+<!-- <section class="py-10 text-center">
 	<h2 class="text-2xl font-bold mb-4">Halaman ini tidak digunakan</h2>
 	<p class="text-gray-400">
 		Silakan gunakan menu Dashboard di sidebar untuk melihat dashboard utama.
 	</p>
-</section>
+</section> -->
 
 <div class="space-y-6">
 	<!-- Header -->
