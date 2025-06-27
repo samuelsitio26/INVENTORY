@@ -309,7 +309,7 @@
 		return false;
 	}
 
-	function handleApprove(item) {
+	async function handleApprove(item) {
 		const idx = data.findIndex((d) => d.id === item.id);
 		if (idx === -1) return;
 		const now = new Date().toISOString();
@@ -321,6 +321,22 @@
 			data[idx].approvals.inventory = { by: user.email, name: user.name, at: now };
 		} else if (stage === 'procurement') {
 			data[idx].approvals.procurement = { by: user.email, name: user.name, at: now };
+		}
+
+		// Simpan ke backend Directus
+		try {
+			await fetch(`https://directus.eltamaprimaindo.com/items/rentals/${item.id}`, {
+				method: 'PATCH',
+				headers: {
+					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ approvals: data[idx].approvals })
+			});
+			// Refresh data agar approval stage update
+			data = await fetchRentalData();
+		} catch (e) {
+			alert('Gagal menyimpan approval ke server!');
 		}
 	}
 	function handlePinjam(item) {
