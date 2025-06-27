@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { searchTerm } from '$lib/stores/search.js';
+	import NotificationBell from '$lib/components/NotificationBell.svelte';
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -13,6 +14,12 @@
 	// State for user
 	let user = null;
 	let dropdownOpen = false;
+
+	// Notification state
+	let reminders = [];
+	let lateItems = [];
+	let waitingApprovalItems = [];
+	let rentalData = [];
 
 	onMount(() => {
 		if (typeof window !== 'undefined') {
@@ -43,6 +50,125 @@
 	function clearSearch() {
 		searchTerm.set('');
 	}
+
+	// Helper functions (copied from rental +page.svelte)
+	function formatDate(dateStr) {
+		if (!dateStr) return '-';
+		const date = new Date(dateStr);
+		const day = String(date.getDate()).padStart(2, '0');
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const year = date.getFullYear();
+		return `${day}-${month}-${year}`;
+	}
+	function calculateDueDate(borrowDate, duration) {
+		if (!borrowDate || !duration) return '-';
+		const date = new Date(borrowDate);
+		date.setDate(date.getDate() + duration);
+		return formatDate(date.toISOString());
+	}
+	function getReminders(rentals) {
+		const today = new Date();
+		const besok = new Date(today);
+		besok.setDate(today.getDate() + 1);
+		return rentals.filter((item) => {
+			if (item.status !== 'Dipinjam') return false;
+			if (
+				!item.tanggalJatuhTempo ||
+				typeof item.tanggalJatuhTempo !== 'string' ||
+				!item.tanggalJatuhTempo.includes('-')
+			)
+				return false;
+			const [day, month, year] = item.tanggalJatuhTempo.split('-');
+			if (!day || !month || !year) return false;
+			const dueDate = new Date(`${year}-${month}-${day}`);
+			return (
+				dueDate.getFullYear() === besok.getFullYear() &&
+				dueDate.getMonth() === besok.getMonth() &&
+				dueDate.getDate() === besok.getDate()
+			);
+		});
+	}
+	function getApprovalStage(item) {
+		if (!item.approvals?.dept) return 'dept';
+		if (!item.approvals?.inventory) return 'inventory';
+		if (!item.approvals?.procurement) return 'procurement';
+		return 'done';
+	}
+
+	async function fetchRentalData() {
+		try {
+			const response = await fetch(
+				'https://directus.eltamaprimaindo.com/items/rentals?fields=*,barang_id.id,barang_id.Nama,barang_id.StokIn,barang_id.parent_category.parent_category,barang_id.sub_category.nama_sub',
+				{
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
+						'Content-Type': 'application/json'
+					}
+				}
+			);
+			if (!response.ok) return [];
+			const result = await response.json();
+			if (!result.data) return [];
+			return result.data.map((item, index) => {
+				// Penentuan status baru: Pending, Approved, Dipinjam, Dikembalikan
+				let status = 'Pending';
+				if (item.approved) status = 'Approved';
+				if (item.returned) status = 'Dikembalikan';
+				else if (item.borrowed) status = 'Dipinjam';
+				return {
+					id: item.id || `temp-${index}`,
+					nama: item.barang_id?.Nama || '-',
+					kategori: item.barang_id?.parent_category?.parent_category || '-',
+					subKategori: item.barang_id?.sub_category?.nama_sub || '-',
+					qty: item.qty ?? '-',
+					peminjam: item.borrower || '-',
+					tanggalPinjam: formatDate(item.borrow_date),
+					tanggalJatuhTempo: calculateDueDate(item.borrow_date, item.duration),
+					durasiPinjam: item.duration ? `${item.duration} hari` : '-',
+					tanggalKembaliAktual: item.actual_return_date ? formatDate(item.actual_return_date) : '-',
+					status,
+					approvals: item.approvals || {},
+					// Raw data untuk keperluan lain
+					rawBorrowDate: item.borrow_date,
+					rawDuration: item.duration,
+					rawActualReturnDate: item.actual_return_date
+				};
+			});
+		} catch (e) {
+			return [];
+		}
+	}
+
+	function getLateItems(data) {
+		return data.filter((item) => {
+			if (item.status !== 'Dipinjam') return false;
+			if (
+				!item.tanggalJatuhTempo ||
+				typeof item.tanggalJatuhTempo !== 'string' ||
+				!item.tanggalJatuhTempo.includes('-')
+			)
+				return false;
+			const [day, month, year] = item.tanggalJatuhTempo.split('-');
+			if (!day || !month || !year) return false;
+			const dueDate = new Date(`${year}-${month}-${day}`);
+			const today = new Date();
+			today.setHours(0, 0, 0, 0);
+			return dueDate < today;
+		});
+	}
+	function getWaitingApprovalItems(data) {
+		return data.filter((item) => {
+			const stage = getApprovalStage(item);
+			return stage !== 'done';
+		});
+	}
+
+	onMount(async () => {
+		rentalData = await fetchRentalData();
+		reminders = getReminders(rentalData);
+		lateItems = getLateItems(rentalData);
+		waitingApprovalItems = getWaitingApprovalItems(rentalData);
+	});
 </script>
 
 {#if $page.url.pathname !== '/login'}
@@ -312,27 +438,7 @@
 						</div>
 
 						<!-- Notification Bell -->
-						<button
-							class="relative p-3 bg-gray-100/80 rounded-xl border border-gray-200/50 hover:bg-gray-200/80 hover:shadow-md transition-all duration-300 group"
-						>
-							<svg
-								class="w-5 h-5 text-gray-600 group-hover:text-gray-800 transition-colors duration-300"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M15 17h5l-5 5v-5zM4 12c0-4.418 3.582-8 8-8s8 3.582 8 8c0 4.418-3.582 8-8 8s-8-3.582-8-8z"
-								></path>
-							</svg>
-							<!-- Notification Dot -->
-							<div
-								class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse"
-							></div>
-						</button>
+						<NotificationBell {reminders} {lateItems} {waitingApprovalItems} />
 					</div>
 				</div>
 			</div>

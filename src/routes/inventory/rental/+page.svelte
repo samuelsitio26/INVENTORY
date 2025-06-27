@@ -14,7 +14,6 @@
 	let showDetailModal = false;
 	let detailItem = null;
 	const UNDO_DURATION = 300000; // 5 menit dalam ms
-	let reminders = [];
 
 	// 1. User login & role mapping
 	let user = null;
@@ -220,8 +219,6 @@
 			console.log('Component mounted, fetching data...');
 			data = await fetchRentalData();
 			console.log('Data loaded:', data);
-			reminders = getReminders(data);
-			console.log('Reminders:', reminders);
 		} catch (e) {
 			console.error('Error in onMount:', e);
 			error = e.message || 'Gagal mengambil data rental';
@@ -359,24 +356,6 @@
 		return `(${min}:${sec.toString().padStart(2, '0')})`;
 	}
 
-	function getReminders(rentals) {
-		const today = new Date();
-		const besok = new Date(today);
-		besok.setDate(today.getDate() + 1);
-
-		return rentals.filter((item) => {
-			if (item.status !== 'Dipinjam') return false;
-			// tanggalJatuhTempo format: dd-mm-yyyy
-			const [day, month, year] = item.tanggalJatuhTempo.split('-');
-			const dueDate = new Date(`${year}-${month}-${day}`);
-			return (
-				dueDate.getFullYear() === besok.getFullYear() &&
-				dueDate.getMonth() === besok.getMonth() &&
-				dueDate.getDate() === besok.getDate()
-			);
-		});
-	}
-
 	// Filter data rental sesuai searchTerm global
 	$: filteredData = !$searchTerm
 		? data
@@ -393,6 +372,23 @@
 				);
 			});
 
+	// Hitung barang yang sudah terlambat (status Dipinjam, jatuh tempo < hari ini)
+	$: lateItems = data.filter((item) => {
+		if (item.status !== 'Dipinjam') return false;
+		if (!item.tanggalJatuhTempo) return false;
+		const [day, month, year] = item.tanggalJatuhTempo.split('-');
+		const dueDate = new Date(`${year}-${month}-${day}`);
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+		return dueDate < today;
+	});
+
+	// Hitung barang yang menunggu approval (status Pending atau belum semua approval terpenuhi)
+	$: waitingApprovalItems = data.filter((item) => {
+		const stage = getApprovalStage(item);
+		return stage !== 'done';
+	});
+
 	function getStatusLabel(item) {
 		const stage = getApprovalStage(item);
 		if (stage === 'dept') return 'Pending';
@@ -404,25 +400,20 @@
 </script>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-	<!-- Header dengan Filter -->
+	<!-- Header dengan Filter + Notification Bell -->
 	<div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
 		<div class="p-6">
 			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
-				<div>
-					<h1 class="text-2xl font-bold text-gray-900">Procurement Peminjaman Barang</h1>
-					<p class="mt-1 text-sm text-gray-600">
-						Status procurement dan persetujuan peminjaman alat
-					</p>
+				<div class="flex items-center gap-4">
+					<div>
+						<h1 class="text-2xl font-bold text-gray-900">Procurement Peminjaman Barang</h1>
+						<p class="mt-1 text-sm text-gray-600">
+							Status procurement dan persetujuan peminjaman alat
+						</p>
+					</div>
 				</div>
-				<div class="mt-4 sm:mt-0 flex items-center space-x-3">
-					<span class="text-sm text-gray-500">Status:</span>
-					<select class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-						<option value="">Semua Status</option>
-						<option value="pending">Pending</option>
-						<option value="approved">Approved</option>
-						<option value="rejected">Rejected</option>
-					</select>
-				</div>
+				<!-- Notification Bell di kanan header -->
+				<div class="flex items-center gap-4 mt-4 sm:mt-0"></div>
 			</div>
 
 			<!-- Search Bar -->
@@ -476,38 +467,6 @@
 					>
 						Refresh Halaman
 					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Reminder for due rentals -->
-	{#if reminders.length > 0}
-		<div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-md">
-			<div class="flex items-start">
-				<div class="flex-shrink-0">
-					<svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-						<path
-							fill-rule="evenodd"
-							d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-							clip-rule="evenodd"
-						/>
-					</svg>
-				</div>
-				<div class="ml-3">
-					<h3 class="text-sm font-medium text-yellow-800">Pengingat Jatuh Tempo</h3>
-					<div class="mt-2 text-sm text-yellow-700">
-						<p class="mb-2">
-							Segera lakukan pengembalian untuk alat berikut yang jatuh tempo besok:
-						</p>
-						<ul class="list-disc pl-5 space-y-1">
-							{#each reminders as reminder}
-								<li>
-									<strong>{reminder.nama}</strong> - Peminjam: {reminder.peminjam} - Jatuh tempo: {reminder.tanggalJatuhTempo}
-								</li>
-							{/each}
-						</ul>
-					</div>
 				</div>
 			</div>
 		</div>
@@ -723,10 +682,10 @@
 									></span>
 									<span class="text-xs">Inventory Manager</span>
 									{#if selectedItem.approvals?.inventory}
-										<span class="text-xs text-green-600"
-											>{selectedItem.approvals.inventory.name} ({selectedItem.approvals.inventory
-												.by}) - {formatDate(selectedItem.approvals.inventory.at)}</span
-										>
+										<span class="text-xs text-green-600">
+											{selectedItem.approvals.inventory?.name} ({selectedItem.approvals.inventory
+												?.by}) - {formatDate(selectedItem.approvals.inventory?.at)}
+										</span>
 									{:else}
 										<span class="text-xs text-gray-400">Belum disetujui</span>
 									{/if}
@@ -739,12 +698,10 @@
 									></span>
 									<span class="text-xs">Procurement Manager</span>
 									{#if selectedItem.approvals?.procurement}
-										<span class="text-xs text-green-600"
-											>{selectedItem.approvals.procurement.name} ({selectedItem.approvals
-												.procurement.by}) - {formatDate(
-												selectedItem.approvals.procurement.at
-											)}</span
-										>
+										<span class="text-xs text-green-600">
+											{selectedItem.approvals.procurement?.name} ({selectedItem.approvals
+												.procurement?.by}) - {formatDate(selectedItem.approvals.procurement?.at)}
+										</span>
 									{:else}
 										<span class="text-xs text-gray-400">Belum disetujui</span>
 									{/if}
@@ -1124,8 +1081,8 @@
 											</p>
 											{#if detailItem.approvals?.inventory}
 												<p class="text-xs text-green-600">
-													Approved by {detailItem.approvals.inventory.name} ({detailItem.approvals
-														.inventory.by})<br />at {formatDate(detailItem.approvals.inventory.at)}
+													{selectedItem.approvals.inventory?.name} ({selectedItem.approvals
+														.inventory?.by}) - {formatDate(selectedItem.approvals.inventory?.at)}
 												</p>
 											{:else}
 												<p class="text-xs text-gray-500">Belum disetujui</p>
@@ -1162,10 +1119,8 @@
 											</p>
 											{#if detailItem.approvals?.procurement}
 												<p class="text-xs text-green-600">
-													Approved by {detailItem.approvals.procurement.name} ({detailItem.approvals
-														.procurement.by})<br />at {formatDate(
-														detailItem.approvals.procurement.at
-													)}
+													{selectedItem.approvals.procurement?.name} ({selectedItem.approvals
+														.procurement?.by}) - {formatDate(detailItem.approvals.procurement.at)}
 												</p>
 											{:else}
 												<p class="text-xs text-gray-500">Belum disetujui</p>
