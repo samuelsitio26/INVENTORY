@@ -16,6 +16,24 @@
 	const UNDO_DURATION = 300000; // 5 menit dalam ms
 	let reminders = [];
 
+	// 1. User login & role mapping
+	let user = null;
+
+	// Simulasi: ambil user dari localStorage/session (atau hardcode untuk demo)
+	// Ganti dengan logic login sesungguhnya jika sudah ada
+	onMount(() => {
+		const email = localStorage.getItem('user_email');
+		if (email === 'managerdept@eltama.com') {
+			user = { email, role: 'Manager Dept', name: 'Manager Dept' };
+		} else if (email === 'inventoryadmin@eltama.com') {
+			user = { email, role: 'Inventory Manager', name: 'Inventory Manager' };
+		} else if (email === 'procurementmanager@eltama.com') {
+			user = { email, role: 'Procurement Manager', name: 'Procurement Manager' };
+		} else {
+			user = { email: '', role: '', name: '' };
+		}
+	});
+
 	// Function untuk format tanggal DD-MM-YYYY
 	function formatDate(dateStr) {
 		if (!dateStr) return '-';
@@ -124,6 +142,7 @@
 					kondisiKembali: item.return_condition || '-',
 					keterangan: item.return_notes || '-',
 					undoUntil: null,
+					approvals: item.approvals || {},
 					// Raw data untuk keperluan lain
 					rawBorrowDate: item.borrow_date,
 					rawDuration: item.duration,
@@ -150,6 +169,7 @@
 					kondisiKembali: '-',
 					keterangan: 'Untuk presentasi client',
 					undoUntil: null,
+					approvals: {},
 					rawBorrowDate: '2025-06-20',
 					rawDuration: 7,
 					rawActualReturnDate: null
@@ -170,6 +190,23 @@
 					kondisiKembali: 'Baik',
 					keterangan: 'Dikembalikan dalam kondisi baik',
 					undoUntil: null,
+					approvals: {
+						dept: {
+							by: 'managerdept@eltama.com',
+							name: 'Manager Dept',
+							at: '2025-06-27T10:00:00Z'
+						},
+						inventory: {
+							by: 'inventoryadmin@eltama.com',
+							name: 'Inventory Manager',
+							at: '2025-06-27T11:00:00Z'
+						},
+						procurement: {
+							by: 'procurementmanager@eltama.com',
+							name: 'Procurement Manager',
+							at: '2025-06-27T12:00:00Z'
+						}
+					},
 					rawBorrowDate: '2025-06-15',
 					rawDuration: 7,
 					rawActualReturnDate: '2025-06-21'
@@ -257,31 +294,39 @@
 	}
 
 	// Fungsi Approve dan Pinjam
+	function getApprovalStage(item) {
+		if (!item.approvals?.dept) return 'dept';
+		if (!item.approvals?.inventory) return 'inventory';
+		if (!item.approvals?.procurement) return 'procurement';
+		return 'done';
+	}
+
+	function canApprove(user, item) {
+		const stage = getApprovalStage(item);
+		if (stage === 'dept' && user.role === 'Manager Dept') return true;
+		if (stage === 'inventory' && user.role === 'Inventory Manager') return true;
+		if (stage === 'procurement' && user.role === 'Procurement Manager') return true;
+		return false;
+	}
+
 	function handleApprove(item) {
 		const idx = data.findIndex((d) => d.id === item.id);
-		if (idx !== -1) {
-			data[idx].status = 'Approved';
+		if (idx === -1) return;
+		const now = new Date().toISOString();
+		if (!data[idx].approvals) data[idx].approvals = {};
+		const stage = getApprovalStage(data[idx]);
+		if (stage === 'dept') {
+			data[idx].approvals.dept = { by: user.email, name: user.name, at: now };
+		} else if (stage === 'inventory') {
+			data[idx].approvals.inventory = { by: user.email, name: user.name, at: now };
+		} else if (stage === 'procurement') {
+			data[idx].approvals.procurement = { by: user.email, name: user.name, at: now };
 		}
 	}
 	function handlePinjam(item) {
 		const idx = data.findIndex((d) => d.id === item.id);
 		if (idx !== -1) {
 			data[idx].status = 'Dipinjam';
-		}
-	}
-
-	function getStatusLabel(status) {
-		switch (status) {
-			case 'Pending':
-				return 'Pending';
-			case 'Approved':
-				return 'Approved';
-			case 'Dipinjam':
-				return 'Dipinjam';
-			case 'Dikembalikan':
-				return 'Dikembalikan';
-			default:
-				return status;
 		}
 	}
 
@@ -331,6 +376,15 @@
 					item.tanggalJatuhTempo?.toLowerCase().includes(search)
 				);
 			});
+
+	function getStatusLabel(item) {
+		const stage = getApprovalStage(item);
+		if (stage === 'dept') return 'Pending';
+		if (stage === 'inventory') return 'Dept Approved';
+		if (stage === 'procurement') return 'Inventory Approved';
+		if (stage === 'done') return 'Approved';
+		return 'Pending';
+	}
 </script>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -532,7 +586,7 @@
 											? 'bg-orange-100 text-orange-700 border-orange-300'
 											: 'bg-green-100 text-green-800 border-green-300'}"
 							>
-								{getStatusLabel(item.status)}
+								{getStatusLabel(item)}
 							</span>
 						</div>
 					</div>
@@ -665,7 +719,7 @@
 								{/if}
 							</div>
 							<div class="flex space-x-2">
-								{#if item.status === 'Pending'}
+								{#if canApprove(user, item)}
 									<button
 										class="px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
 										on:click={() => handleApprove(item)}
@@ -1028,9 +1082,19 @@
 								</h3>
 								<div class="space-y-3">
 									<div
-										class="flex items-center space-x-3 p-3 bg-green-50 rounded-lg border border-green-200"
+										class="flex items-center space-x-3 p-3 rounded-lg border"
+										class:bg-green-50={detailItem.approvals?.dept}
+										class:bg-gray-50={!detailItem.approvals?.dept}
+										class:border-green-200={detailItem.approvals?.dept}
+										class:border-gray-200={!detailItem.approvals?.dept}
 									>
-										<svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+										<svg
+											class="w-5 h-5"
+											fill="currentColor"
+											viewBox="0 0 20 20"
+											class:text-green-500={detailItem.approvals?.dept}
+											class:text-gray-400={!detailItem.approvals?.dept}
+										>
 											<path
 												fill-rule="evenodd"
 												d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
@@ -1038,14 +1102,37 @@
 											/>
 										</svg>
 										<div class="flex-1">
-											<p class="text-sm font-medium text-green-800">Manager Dept</p>
-											<p class="text-xs text-green-600">Fully Approved</p>
+											<p
+												class="text-sm font-medium"
+												class:text-green-800={detailItem.approvals?.dept}
+												class:text-gray-700={!detailItem.approvals?.dept}
+											>
+												Manager Dept
+											</p>
+											{#if detailItem.approvals?.dept}
+												<p class="text-xs text-green-600">
+													Approved by {detailItem.approvals.dept.name} ({detailItem.approvals.dept
+														.by})<br />at {formatDate(detailItem.approvals.dept.at)}
+												</p>
+											{:else}
+												<p class="text-xs text-gray-500">Belum disetujui</p>
+											{/if}
 										</div>
 									</div>
 									<div
-										class="flex items-center space-x-3 p-3 bg-green-50 rounded-lg border border-green-200"
+										class="flex items-center space-x-3 p-3 rounded-lg border"
+										class:bg-green-50={detailItem.approvals?.inventory}
+										class:bg-gray-50={!detailItem.approvals?.inventory}
+										class:border-green-200={detailItem.approvals?.inventory}
+										class:border-gray-200={!detailItem.approvals?.inventory}
 									>
-										<svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+										<svg
+											class="w-5 h-5"
+											fill="currentColor"
+											viewBox="0 0 20 20"
+											class:text-green-500={detailItem.approvals?.inventory}
+											class:text-gray-400={!detailItem.approvals?.inventory}
+										>
 											<path
 												fill-rule="evenodd"
 												d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
@@ -1053,14 +1140,37 @@
 											/>
 										</svg>
 										<div class="flex-1">
-											<p class="text-sm font-medium text-green-800">Inventory Manager</p>
-											<p class="text-xs text-green-600">Fully Approved</p>
+											<p
+												class="text-sm font-medium"
+												class:text-green-800={detailItem.approvals?.inventory}
+												class:text-gray-700={!detailItem.approvals?.inventory}
+											>
+												Inventory Manager
+											</p>
+											{#if detailItem.approvals?.inventory}
+												<p class="text-xs text-green-600">
+													Approved by {detailItem.approvals.inventory.name} ({detailItem.approvals
+														.inventory.by})<br />at {formatDate(detailItem.approvals.inventory.at)}
+												</p>
+											{:else}
+												<p class="text-xs text-gray-500">Belum disetujui</p>
+											{/if}
 										</div>
 									</div>
 									<div
-										class="flex items-center space-x-3 p-3 bg-green-50 rounded-lg border border-green-200"
+										class="flex items-center space-x-3 p-3 rounded-lg border"
+										class:bg-green-50={detailItem.approvals?.procurement}
+										class:bg-gray-50={!detailItem.approvals?.procurement}
+										class:border-green-200={detailItem.approvals?.procurement}
+										class:border-gray-200={!detailItem.approvals?.procurement}
 									>
-										<svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+										<svg
+											class="w-5 h-5"
+											fill="currentColor"
+											viewBox="0 0 20 20"
+											class:text-green-500={detailItem.approvals?.procurement}
+											class:text-gray-400={!detailItem.approvals?.procurement}
+										>
 											<path
 												fill-rule="evenodd"
 												d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
@@ -1068,8 +1178,23 @@
 											/>
 										</svg>
 										<div class="flex-1">
-											<p class="text-sm font-medium text-green-800">Procurement Manager</p>
-											<p class="text-xs text-green-600">Fully Approved</p>
+											<p
+												class="text-sm font-medium"
+												class:text-green-800={detailItem.approvals?.procurement}
+												class:text-gray-700={!detailItem.approvals?.procurement}
+											>
+												Procurement Manager
+											</p>
+											{#if detailItem.approvals?.procurement}
+												<p class="text-xs text-green-600">
+													Approved by {detailItem.approvals.procurement.name} ({detailItem.approvals
+														.procurement.by})<br />at {formatDate(
+														detailItem.approvals.procurement.at
+													)}
+												</p>
+											{:else}
+												<p class="text-xs text-gray-500">Belum disetujui</p>
+											{/if}
 										</div>
 									</div>
 								</div>
