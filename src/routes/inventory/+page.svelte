@@ -11,7 +11,7 @@
 	let loading = false;
 	let error = null;
 	let toast = { show: false, message: '', type: 'success' };
-	let confirmDialog = { show: false, message: '', id: null, name: '' };
+	let confirmDialog = { show: false, message: '', id: null, name: '', type: 'received' };
 	let addToStockDialog = { show: false, selectedItem: null };
 	let editStockDialog = { show: false, selectedItem: null };
 
@@ -287,46 +287,53 @@
 			show: true,
 			message: `Apakah Anda yakin ingin menghapus "${name}"?`,
 			id,
-			name
+			name,
+			type: 'received' // Menandai bahwa ini adalah penghapusan barang diterima
 		};
 	}
 
 	async function handleConfirmDelete() {
-		const { id } = confirmDialog;
+		const { id, type } = confirmDialog;
 
-		stockStore.update((current) => {
-			const updatedItems = current.items.filter((item) => item.id !== id);
-			return {
-				...current,
-				items: updatedItems,
-				originalItems: updatedItems
+		if (type === 'stock') {
+			// Hapus dari stok (database)
+			await handleDeleteStockItem(id);
+		} else {
+			// Hapus dari barang diterima (hanya hidden dari tampilan)
+			stockStore.update((current) => {
+				const updatedItems = current.items.filter((item) => item.id !== id);
+				return {
+					...current,
+					items: updatedItems,
+					originalItems: updatedItems
+				};
+			});
+
+			totalItems = $stockStore.items.length;
+			stockStats.set({
+				totalItems: totalItems,
+				readyItems: totalItems,
+				lowStockItems: 0,
+				outOfStockItems: 0
+			});
+
+			updatePaginatedItems($stockStore.items);
+
+			toast = {
+				show: true,
+				message: 'Barang berhasil disembunyikan dari tampilan!',
+				type: 'success'
 			};
-		});
-
-		totalItems = $stockStore.items.length;
-		stockStats.set({
-			totalItems: totalItems,
-			readyItems: totalItems,
-			lowStockItems: 0,
-			outOfStockItems: 0
-		});
-
-		updatePaginatedItems($stockStore.items);
-
-		toast = {
-			show: true,
-			message: 'Barang berhasil disembunyikan dari tampilan!',
-			type: 'success'
-		};
-		setTimeout(() => {
-			toast.show = false;
-		}, 2000);
+			setTimeout(() => {
+				toast.show = false;
+			}, 2000);
+		}
 
 		confirmDialog.show = false;
 	}
 
 	function handleCancelDelete() {
-		confirmDialog = { show: false, message: '', id: null, name: '' };
+		confirmDialog = { show: false, message: '', id: null, name: '', type: 'received' };
 	}
 
 	function editStock(item) {
@@ -436,6 +443,72 @@
 
 	function handleCancelEdit() {
 		editStockDialog = { show: false, selectedItem: null };
+	}
+
+	// Fungsi untuk menghapus item dari stok
+	function deleteStockItem(id, name) {
+		confirmDialog = {
+			show: true,
+			message: `Apakah Anda yakin ingin menghapus "${name}" dari stok? Data ini akan dihapus permanen dari database.`,
+			id,
+			name,
+			type: 'stock' // Menandai bahwa ini adalah penghapusan stok
+		};
+	}
+
+	async function handleDeleteStockItem(id) {
+		try {
+			// Hapus dari database Directus
+			const response = await fetch(
+				`https://directus.eltamaprimaindo.com/items/Barang/${id}`,
+				{
+					method: 'DELETE',
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+					}
+				}
+			);
+
+			if (!response.ok) {
+				const errorText = await response.text();
+				throw new Error(`Gagal menghapus item: ${errorText}`);
+			}
+
+			// Hapus dari data lokal
+			stockedItems = stockedItems.filter((item) => item.id !== id);
+
+			// Update statistik setelah hapus
+			const readyItems = stockedItems.filter((item) => item.status === 'Ready').length;
+			const lowStockItems = stockedItems.filter((item) => item.status === 'Low Stock').length;
+			const outOfStockItems = stockedItems.filter((item) => item.status === 'Out of Stock').length;
+
+			stockStats.set({
+				totalItems: stockedItems.length,
+				readyItems,
+				lowStockItems,
+				outOfStockItems
+			});
+
+			toast = { 
+				show: true, 
+				message: 'Barang berhasil dihapus dari stok!', 
+				type: 'success' 
+			};
+			setTimeout(() => {
+				toast.show = false;
+			}, 2000);
+
+		} catch (err) {
+			toast = { 
+				show: true, 
+				message: 'Error: ' + err.message, 
+				type: 'error' 
+			};
+			setTimeout(() => {
+				toast.show = false;
+			}, 3000);
+			console.error('Error deleting stock item:', err);
+		}
 	}
 
 	// Clear search function
@@ -817,12 +890,18 @@
 												>
 											{/if}
 										</td>
-										<td class="p-4 whitespace-nowrap">
+										<td class="p-4 whitespace-nowrap space-x-2">
 											<button
 												on:click={() => editStock(item)}
 												class="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
 											>
 												Edit
+											</button>
+											<button
+												on:click={() => deleteStockItem(item.id, item.name)}
+												class="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md text-xs font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+											>
+												Hapus
 											</button>
 										</td>
 									</tr>
