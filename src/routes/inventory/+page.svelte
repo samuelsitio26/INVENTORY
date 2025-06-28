@@ -37,6 +37,26 @@
 	const stockItemsPerPage = 20;
 	let paginatedStockedItems = [];
 
+	// Fungsi untuk menghitung status berdasarkan stok dan threshold
+	function calculateStatus(
+		stock,
+		useCustomThresholds = false,
+		readyThreshold = 5,
+		lowStockThreshold = 1
+	) {
+		if (stock === 0) return 'Out of Stock';
+		if (useCustomThresholds) {
+			if (stock >= readyThreshold) return 'Ready';
+			if (stock >= lowStockThreshold) return 'Low Stock';
+			return 'Out of Stock';
+		} else {
+			// Default thresholds: Ready >= 5, Low Stock 1-4, Out of Stock = 0
+			if (stock >= 5) return 'Ready';
+			if (stock >= 1) return 'Low Stock';
+			return 'Out of Stock';
+		}
+	}
+
 	async function loadData() {
 		loading = true;
 		try {
@@ -117,12 +137,27 @@
 			// Simpan data Barang ke stockedItems dengan penanganan yang lebih baik
 			stockedItems = barangData.data.map((item) => {
 				console.log('Mapping item:', item); // Debug setiap item
+
+				// Ambil threshold settings dari API atau gunakan default
+				const useCustomThresholds = item.useCustomThresholds || false;
+				const readyThreshold = item.readyThreshold || 5;
+				const lowStockThreshold = item.lowStockThreshold || 1;
+				const stockIn = item.StokIn || 0;
+
+				// Hitung status berdasarkan stok dan threshold
+				const calculatedStatus = calculateStatus(
+					stockIn,
+					useCustomThresholds,
+					readyThreshold,
+					lowStockThreshold
+				);
+
 				return {
 					id: item.id,
 					name: item.Nama || '-',
 					description: item.Deskripsi || 'Tidak ada deskripsi',
-					stockIn: item.StokIn || 0,
-					status: item.Status?.value || item.Status || 'Unknown', // Handle Status sebagai object atau string
+					stockIn: stockIn,
+					status: calculatedStatus, // Gunakan status yang dihitung
 					parent_category:
 						parentCategories.find((cat) => cat.id === item.parent_category?.id)?.parent_category ||
 						'Unknown',
@@ -130,37 +165,21 @@
 						subCategories.find((cat) => cat.id === item.sub_category?.id)?.nama_sub || 'Unknown',
 					// Tambahan: simpan ID kategori dan subkategori untuk kebutuhan edit
 					parent_category_id: item.parent_category?.id || null,
-					sub_category_id: item.sub_category?.id || null
+					sub_category_id: item.sub_category?.id || null,
+					// Simpan threshold settings
+					useCustomThresholds: useCustomThresholds,
+					readyThreshold: readyThreshold,
+					lowStockThreshold: lowStockThreshold
 				};
 			});
 			console.log('Stocked Items:', stockedItems); // Debug stockedItems
 
-			// Update statistik
-			stockStats.set({
-				totalItems: mappedItems.length,
-				readyItems: mappedItems.length,
-				lowStockItems: 0,
-				outOfStockItems: 0
-			});
-
-			// Update statistik dan status barang
-			const readyThreshold = 5; // threshold stok minimum untuk status Ready
-
-			// Update status pada setiap item
-			stockedItems = stockedItems.map((item) => {
-				let status = 'Ready';
-				if (item.stockIn === 0) {
-					status = 'Out of Stock';
-				} else if (item.stockIn > 0 && item.stockIn <= readyThreshold) {
-					status = 'Low Stock';
-				}
-				return { ...item, status };
-			});
-
+			// Hitung statistik berdasarkan status yang sudah dihitung
 			const readyItems = stockedItems.filter((item) => item.status === 'Ready').length;
 			const lowStockItems = stockedItems.filter((item) => item.status === 'Low Stock').length;
 			const outOfStockItems = stockedItems.filter((item) => item.status === 'Out of Stock').length;
 
+			// Update statistik
 			stockStats.set({
 				totalItems: stockedItems.length,
 				readyItems,
@@ -315,8 +334,18 @@
 			show: true,
 			selectedItem: {
 				id: item.id,
+				name: item.name,
+				description: item.description,
 				stockIn: item.stockIn,
-				status: item.status // string, bukan object
+				status: item.status, // string, bukan object
+				parent_category: item.parent_category,
+				sub_category: item.sub_category,
+				parent_category_id: item.parent_category_id,
+				sub_category_id: item.sub_category_id,
+				// Threshold settings
+				useCustomThresholds: item.useCustomThresholds || false,
+				readyThreshold: item.readyThreshold || 5,
+				lowStockThreshold: item.lowStockThreshold || 1
 			}
 		};
 	}
@@ -324,7 +353,27 @@
 	async function handleEditStock({ detail }) {
 		try {
 			console.log('handleEditStock detail:', detail);
-			// Hanya update stok dan status, status harus string
+
+			// Hitung status berdasarkan stok dan threshold settings
+			const calculatedStatus = calculateStatus(
+				detail.stockIn,
+				detail.useCustomThresholds,
+				detail.readyThreshold,
+				detail.lowStockThreshold
+			);
+
+			// Update semua field yang dapat diedit, termasuk threshold settings
+			const updatePayload = {
+				Nama: detail.name,
+				Deskripsi: detail.description,
+				StokIn: detail.stockIn,
+				Status: calculatedStatus,
+				// Simpan pengaturan threshold
+				useCustomThresholds: detail.useCustomThresholds || false,
+				readyThreshold: detail.readyThreshold || 5,
+				lowStockThreshold: detail.lowStockThreshold || 1
+			};
+
 			const response = await fetch(
 				`https://directus.eltamaprimaindo.com/items/Barang/${detail.id}`,
 				{
@@ -333,11 +382,7 @@
 						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
 						'Content-Type': 'application/json'
 					},
-					body: JSON.stringify({
-						StokIn: detail.stockIn,
-						Status:
-							typeof detail.status === 'string' ? detail.status : detail.status?.value || 'Unknown'
-					})
+					body: JSON.stringify(updatePayload)
 				}
 			);
 
@@ -346,18 +391,33 @@
 				throw new Error(`Gagal menyimpan perubahan: ${errorText}`);
 			}
 
+			// Update data lokal
 			stockedItems = stockedItems.map((item) =>
 				item.id === detail.id
 					? {
 							...item,
+							name: detail.name,
+							description: detail.description,
 							stockIn: detail.stockIn,
-							status:
-								typeof detail.status === 'string'
-									? detail.status
-									: detail.status?.value || 'Unknown'
+							status: calculatedStatus,
+							useCustomThresholds: detail.useCustomThresholds,
+							readyThreshold: detail.readyThreshold,
+							lowStockThreshold: detail.lowStockThreshold
 						}
 					: item
 			);
+
+			// Update statistik setelah edit
+			const readyItems = stockedItems.filter((item) => item.status === 'Ready').length;
+			const lowStockItems = stockedItems.filter((item) => item.status === 'Low Stock').length;
+			const outOfStockItems = stockedItems.filter((item) => item.status === 'Out of Stock').length;
+
+			stockStats.set({
+				totalItems: stockedItems.length,
+				readyItems,
+				lowStockItems,
+				outOfStockItems
+			});
 
 			toast = { show: true, message: 'Barang berhasil diperbarui!', type: 'success' };
 			setTimeout(() => {
@@ -517,9 +577,12 @@
 <div class="space-y-6 p-6 bg-white-100 min-h-screen">
 	<!-- Search Filter - Diperbaiki dengan clear button -->
 	<div class="mb-4">
-		<label class="block text-sm font-medium text-gray-700 mb-2">Pencarian Barang</label>
+		<label for="search-barang" class="block text-sm font-medium text-gray-700 mb-2"
+			>Pencarian Barang</label
+		>
 		<div class="relative">
 			<input
+				id="search-barang"
 				type="text"
 				bind:value={$searchTerm}
 				placeholder="Cari di semua tabel: nama barang, kategori, departemen, status, deskripsi..."
@@ -541,6 +604,7 @@
 				<button
 					on:click={clearSearch}
 					class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+					aria-label="Hapus pencarian"
 				>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -989,9 +1053,9 @@
 	}
 
 	/* Highlight search results */
-	.search-highlight {
+	/* .search-highlight {
 		background-color: #fef3c7;
 		padding: 1px 2px;
 		border-radius: 2px;
-	}
+	} */
 </style>

@@ -202,7 +202,10 @@
 								<div
 									class="absolute inset-0 bg-white/10 rounded-2xl animate-pulse duration-2000"
 								></div>
-								<span class="relative text-3xl filter drop-shadow-lg">📦</span>
+								<!-- <span class="relative text-3xl filter drop-shadow-lg"><img src="/Logo-Eltama-Prima-Indo-01.png" alt="Logo" class="w-16 h-16 mb-2 drop-shadow-lg" /></span>  rapihkan logo -->
+								<span class="relative text-3xl font-bold text-white"> 
+									<img src="/Logo-Eltama-Prima-Indo-01.png" alt="Logo" class="w-16 h-16 drop-shadow-lg" /> 
+								</span>
 							</div>
 						</div>
 
