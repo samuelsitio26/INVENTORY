@@ -459,15 +459,12 @@
 	async function handleDeleteStockItem(id) {
 		try {
 			// Hapus dari database Directus
-			const response = await fetch(
-				`https://directus.eltamaprimaindo.com/items/Barang/${id}`,
-				{
-					method: 'DELETE',
-					headers: {
-						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
-					}
+			const response = await fetch(`https://directus.eltamaprimaindo.com/items/Barang/${id}`, {
+				method: 'DELETE',
+				headers: {
+					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
 				}
-			);
+			});
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -489,20 +486,19 @@
 				outOfStockItems
 			});
 
-			toast = { 
-				show: true, 
-				message: 'Barang berhasil dihapus dari stok!', 
-				type: 'success' 
+			toast = {
+				show: true,
+				message: 'Barang berhasil dihapus dari stok!',
+				type: 'success'
 			};
 			setTimeout(() => {
 				toast.show = false;
 			}, 2000);
-
 		} catch (err) {
-			toast = { 
-				show: true, 
-				message: 'Error: ' + err.message, 
-				type: 'error' 
+			toast = {
+				show: true,
+				message: 'Error: ' + err.message,
+				type: 'error'
 			};
 			setTimeout(() => {
 				toast.show = false;
