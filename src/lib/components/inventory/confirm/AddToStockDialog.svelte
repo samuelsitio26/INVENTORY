@@ -57,9 +57,68 @@
 		}
 	}
 
+	// Auto-update status berdasarkan stockIn
+	$: {
+		if (formData.stockIn !== undefined && formData.stockIn !== null) {
+			const stock = parseInt(formData.stockIn);
+			if (stock === 0) {
+				formData.status = 'Out of Stock';
+			} else if (stock < 5) {
+				formData.status = 'Low Stock';
+			} else {
+				formData.status = 'Ready';
+			}
+		}
+	}
+
 	$: if (selectedItem) {
 		formData.name = selectedItem.name || '';
 		formData.stockIn = selectedItem.quantity;
+		// Auto-match dengan identitas barang
+		autoMatchIdentitasBarang(selectedItem.name);
+	}
+
+	// Fungsi untuk auto-match identitas barang berdasarkan nama
+	function autoMatchIdentitasBarang(itemName) {
+		if (!itemName || !identitasBarangList.length) return;
+
+		// Cari exact match dulu
+		let matchedBarang = identitasBarangList.find(
+			(b) => b.nama_barang_lengkap.toLowerCase() === itemName.toLowerCase()
+		);
+
+		// Jika tidak ada exact match, cari yang mengandung kata kunci
+		if (!matchedBarang) {
+			matchedBarang = identitasBarangList.find(
+				(b) =>
+					b.nama_barang_lengkap.toLowerCase().includes(itemName.toLowerCase()) ||
+					itemName.toLowerCase().includes(b.nama_barang_lengkap.toLowerCase())
+			);
+		}
+
+		if (matchedBarang) {
+			// Auto-fill form dengan data yang ditemukan
+			formData.identitas_id = matchedBarang.id;
+			formData.name = matchedBarang.nama_barang_lengkap;
+
+			const parentCat = parentCategories.find((cat) => cat.id === matchedBarang.parent_category);
+			formData.parent_category = parentCat
+				? parentCat.parent_category
+				: matchedBarang.parent_category || '';
+
+			const subCat = subCategories.find((cat) => cat.id === matchedBarang.sub_category);
+			formData.sub_category = subCat ? subCat.nama_sub : matchedBarang.sub_category || '';
+
+			// Auto-update status berdasarkan stockIn saat ini
+			const stock = parseInt(formData.stockIn) || 0;
+			if (stock === 0) {
+				formData.status = 'Out of Stock';
+			} else if (stock < 5) {
+				formData.status = 'Low Stock';
+			} else {
+				formData.status = 'Ready';
+			}
+		}
 	}
 
 	function handleNamaChange(e) {
@@ -69,9 +128,21 @@
 			formData.identitas_id = id;
 			formData.name = barang.nama_barang_lengkap || '';
 			const parentCat = parentCategories.find((cat) => cat.id === barang.parent_category);
-			formData.parent_category = parentCat ? parentCat.parent_category : barang.parent_category || '';
+			formData.parent_category = parentCat
+				? parentCat.parent_category
+				: barang.parent_category || '';
 			const subCat = subCategories.find((cat) => cat.id === barang.sub_category);
 			formData.sub_category = subCat ? subCat.nama_sub : barang.sub_category || '';
+
+			// Auto-update status berdasarkan stockIn saat ini
+			const stock = parseInt(formData.stockIn) || 0;
+			if (stock === 0) {
+				formData.status = 'Out of Stock';
+			} else if (stock < 5) {
+				formData.status = 'Low Stock';
+			} else {
+				formData.status = 'Ready';
+			}
 		} else {
 			formData.identitas_id = id;
 			formData.name = '';
@@ -86,7 +157,12 @@
 		if (!formData.detail) errors.detail = 'Deskripsi wajib diisi';
 		if (!formData.stockIn || formData.stockIn <= 0) errors.stockIn = 'Stok harus lebih dari 0';
 		if (!formData.status) errors.status = 'Status wajib dipilih';
-		if (!formData.identitas_id) errors.identitas_id = 'Pilih nama barang';
+
+		// Hanya validasi identitas_id jika tidak ada auto-match
+		if (!formData.identitas_id && !formData.parent_category) {
+			errors.identitas_id = 'Pilih nama barang dari daftar atau pastikan kategori terisi';
+		}
+
 		return Object.keys(errors).length === 0;
 	}
 
@@ -97,8 +173,11 @@
 				const payload = {
 					identitas_id: formData.identitas_id,
 					name: formData.name || '-',
-					parent_category: parentCategories.find((cat) => cat.parent_category === formData.parent_category)?.id || null,
-					sub_category: subCategories.find((cat) => cat.nama_sub === formData.sub_category)?.id || null,
+					parent_category:
+						parentCategories.find((cat) => cat.parent_category === formData.parent_category)?.id ||
+						null,
+					sub_category:
+						subCategories.find((cat) => cat.nama_sub === formData.sub_category)?.id || null,
 					detail: formData.detail || 'Tidak ada deskripsi',
 					stockIn: parseInt(formData.stockIn) || 0,
 					status: formData.status || 'Unknown'
@@ -159,6 +238,16 @@
 		const subCat = subCategories.find((cat) => cat.id === barang.sub_category);
 		formData.sub_category = subCat ? subCat.nama_sub : barang.sub_category || '';
 		showDropdown = false;
+
+		// Auto-update status berdasarkan stockIn saat ini
+		const stock = parseInt(formData.stockIn) || 0;
+		if (stock === 0) {
+			formData.status = 'Out of Stock';
+		} else if (stock < 5) {
+			formData.status = 'Low Stock';
+		} else {
+			formData.status = 'Ready';
+		}
 	}
 </script>
 
@@ -169,63 +258,113 @@
 
 			<!-- Modern Notification for Missing Item or Category -->
 			{#if showNotification}
-			<div class="flex items-start gap-4 p-4 rounded-2xl shadow-md bg-yellow-100 border border-yellow-300 text-yellow-800 mb-4 animate-fade-in">
-				<!-- Icon -->
-				<div class="mt-1">
-				<svg class="w-6 h-6 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
-					<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-				</svg>
-				</div>
-
-				<!-- Message -->
-				<div class="flex-1 text-sm">
-				<p class="mb-2 font-medium">{notificationMessage}</p>
-				<a
-					href="/inventory/create"
-					class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-white bg-blue-600 hover:bg-blue-700 text-sm shadow transition"
+				<div
+					class="flex items-start gap-4 p-4 rounded-2xl shadow-md bg-yellow-100 border border-yellow-300 text-yellow-800 mb-4 animate-fade-in"
 				>
-					➕ Tambah Barang
-				</a>
-				</div>
+					<!-- Icon -->
+					<div class="mt-1">
+						<svg class="w-6 h-6 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+							<path
+								fill-rule="evenodd"
+								d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+								clip-rule="evenodd"
+							></path>
+						</svg>
+					</div>
 
-				<!-- Close button -->
-				<button on:click={dismissNotification} class="text-yellow-600 hover:text-yellow-800">
-				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-				</svg>
-				</button>
-			</div>
+					<!-- Message -->
+					<div class="flex-1 text-sm">
+						<p class="mb-2 font-medium">{notificationMessage}</p>
+						<a
+							href="/inventory/create"
+							class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-white bg-blue-600 hover:bg-blue-700 text-sm shadow transition"
+						>
+							➕ Tambah Barang
+						</a>
+					</div>
+
+					<!-- Close button -->
+					<button
+						on:click={dismissNotification}
+						class="text-yellow-600 hover:text-yellow-800"
+						aria-label="Tutup notifikasi"
+					>
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M6 18L18 6M6 6l12 12"
+							></path>
+						</svg>
+					</button>
+				</div>
 			{/if}
 
 			<div class="space-y-5">
+				<!-- Auto-Match Status (Jika ada match) -->
+				{#if formData.identitas_id}
+					<div class="bg-green-50 border border-green-200 rounded-lg p-3">
+						<div class="flex items-center gap-2">
+							<svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+								<path
+									fill-rule="evenodd"
+									d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+									clip-rule="evenodd"
+								></path>
+							</svg>
+							<span class="text-sm font-medium text-green-800">✅ Barang ditemukan di database</span
+							>
+						</div>
+						<p class="text-xs text-green-700 mt-1">
+							Kategori dan informasi sudah terisi otomatis. Silakan atur stok dan deskripsi, status
+							akan otomatis disesuaikan.
+						</p>
+					</div>
+				{/if}
 				<!-- Dropdown Nama Barang -->
 				<div class="relative">
-					<label class="block text-sm font-medium text-gray-700 mb-1.5">Nama Barang</label>
+					<label for="namaBarang" class="block text-sm font-medium text-gray-700 mb-1.5"
+						>Nama Barang</label
+					>
 					<input
+						id="namaBarang"
 						type="text"
 						class="block w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm"
 						bind:value={formData.name}
 						placeholder="Cari atau masukkan nama barang..."
-						on:input={() => {
+						on:input={(e) => {
 							showDropdown = true;
-							formData.identitas_id = '';
+							// Jika user mengetik manual, reset identitas_id
+							if (e.target.value !== formData.name) {
+								formData.identitas_id = '';
+								formData.parent_category = '';
+								formData.sub_category = '';
+							}
+							// Coba auto-match saat user mengetik
+							autoMatchIdentitasBarang(e.target.value);
 						}}
 						on:focus={() => (showDropdown = true)}
 						on:blur={() => setTimeout(() => (showDropdown = false), 200)}
 					/>
 					{#if showDropdown && filteredBarangList.length > 0}
-						<ul
+						<div
 							class="absolute z-20 bg-white border border-gray-200 w-full max-h-48 overflow-y-auto rounded-lg shadow-lg mt-1"
+							role="listbox"
 						>
 							{#each filteredBarangList as barang}
-								<li
+								<div
 									class="px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-800 cursor-pointer transition-colors duration-150"
-									on:mousedown={() => selectBarang(barang)}
+									on:click={() => selectBarang(barang)}
+									on:keydown={(e) => e.key === 'Enter' && selectBarang(barang)}
+									role="option"
+									aria-selected={formData.identitas_id === barang.id}
+									tabindex="0"
 								>
 									{barang.nama_barang_lengkap}
-								</li>
+								</div>
 							{/each}
-						</ul>
+						</div>
 					{/if}
 					{#if errors.name}
 						<p class="text-red-500 text-xs mt-1.5">{errors.name}</p>
@@ -235,8 +374,11 @@
 				<!-- Kategori dan Sub Kategori -->
 				<div class="grid grid-cols-2 gap-4">
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-1.5">Kategori</label>
+						<label for="kategori" class="block text-sm font-medium text-gray-700 mb-1.5"
+							>Kategori</label
+						>
 						<input
+							id="kategori"
 							type="text"
 							class="block w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
 							bind:value={formData.parent_category}
@@ -244,8 +386,11 @@
 						/>
 					</div>
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-1.5">Sub Kategori</label>
+						<label for="subKategori" class="block text-sm font-medium text-gray-700 mb-1.5"
+							>Sub Kategori</label
+						>
 						<input
+							id="subKategori"
 							type="text"
 							class="block w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
 							bind:value={formData.sub_category}
@@ -256,8 +401,11 @@
 
 				<!-- Deskripsi -->
 				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1.5">Deskripsi</label>
+					<label for="deskripsi" class="block text-sm font-medium text-gray-700 mb-1.5"
+						>Deskripsi</label
+					>
 					<textarea
+						id="deskripsi"
 						bind:value={formData.detail}
 						class="block w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm"
 						rows="4"
@@ -270,8 +418,9 @@
 
 				<!-- Stok -->
 				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1.5">Stok</label>
+					<label for="stok" class="block text-sm font-medium text-gray-700 mb-1.5">Stok</label>
 					<input
+						id="stok"
 						type="number"
 						bind:value={formData.stockIn}
 						class="block w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm"
@@ -285,8 +434,9 @@
 
 				<!-- Status -->
 				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
+					<label for="status" class="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
 					<select
+						id="status"
 						bind:value={formData.status}
 						class="block w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm"
 					>
@@ -294,6 +444,9 @@
 							<option value={option.value}>{option.label}</option>
 						{/each}
 					</select>
+					<p class="text-xs text-gray-500 mt-1">
+						Status akan diperbarui otomatis berdasarkan jumlah stok
+					</p>
 					{#if errors.status}
 						<p class="text-red-500 text-xs mt-1.5">{errors.status}</p>
 					{/if}

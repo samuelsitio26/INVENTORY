@@ -423,6 +423,65 @@
 	let filterEndDate = '';
 	let filterStatus = '';
 	let filterSearch = '';
+
+	// Pilihan Warna Gradient dengan color preview
+	let colorOptions = [
+		{
+			name: 'Blue',
+			gradient: 'from-white to-blue-900 border-blue-900',
+			color: 'bg-blue-900',
+			preview: 'bg-gradient-to-br from-white to-blue-900'
+		},
+		{
+			name: 'Green',
+			gradient: 'from-white to-green-900 border-green-900',
+			color: 'bg-green-900',
+			preview: 'bg-gradient-to-br from-white to-green-900'
+		},
+		{
+			name: 'Red',
+			gradient: 'from-white to-red-900 border-red-900',
+			color: 'bg-red-900',
+			preview: 'bg-gradient-to-br from-white to-red-900'
+		},
+		{
+			name: 'Teal',
+			gradient: 'from-white to-teal-900 border-teal-900',
+			color: 'bg-teal-900',
+			preview: 'bg-gradient-to-br from-white to-teal-900'
+		},
+		{
+			name: 'Indigo',
+			gradient: 'from-white to-indigo-900 border-indigo-900',
+			color: 'bg-indigo-900',
+			preview: 'bg-gradient-to-br from-white to-indigo-900'
+		}
+	];
+	let selectedGradient = colorOptions[0].gradient;
+
+	// Fungsi untuk edit peminjaman
+	function handleEditPeminjaman(item) {
+		if (!user || !user.role) {
+			alert('Akses ditolak: Role user tidak valid');
+			return;
+		}
+
+		// Hanya bisa edit jika belum disetujui sepenuhnya
+		const stage = getApprovalStage(item);
+		if (stage === 'done' && item.status !== 'Pending') {
+			alert('Tidak dapat mengedit: Peminjaman sudah disetujui sepenuhnya');
+			return;
+		}
+
+		// Redirect ke halaman edit atau buka modal edit
+		// Untuk sementara, tampilkan alert sebagai placeholder
+		alert(`Edit peminjaman "${item.namaBarang}"\n\nFitur edit akan diarahkan ke halaman/modal edit peminjaman`);
+		
+		// TODO: Implementasi redirect atau modal edit
+		// goto(`/inventory/rental/edit/${item.id}`);
+	}
+
+	// ...existing code...
 </script>
 
 <div
@@ -551,7 +610,7 @@
 							style="height:100%; max-height:100%;"
 						>
 							<div
-								class="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl shadow-lg border border-blue-200 p-8 flex flex-col gap-6 h-full min-h-[400px] overflow-y-auto max-h-full"
+								class={`bg-gradient-to-br ${selectedGradient} rounded-2xl shadow-lg p-8 flex flex-col gap-6 h-full min-h-[400px] overflow-y-auto max-h-full`}
 							>
 								<div class="flex items-center justify-between mb-6">
 									<div class="flex items-center gap-4">
@@ -960,11 +1019,6 @@
 											class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-semibold shadow-sm transition-colors"
 											on:click={() => handleReturn(selectedItem)}>Proses Pengembalian</button
 										>
-									{:else}
-										<button
-											class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg border text-sm font-semibold shadow-sm"
-											disabled>Lihat Detail</button
-										>
 									{/if}
 									{#if canUndo(selectedItem)}
 										<button
@@ -976,10 +1030,12 @@
 									<!-- Tombol Edit & Batalkan -->
 									<button
 										class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg border text-sm font-semibold shadow-sm hover:bg-gray-300 transition-colors"
+										on:click={() => handleEditPeminjaman(selectedItem)}
 										>Edit Peminjaman</button
 									>
 									<button
 										class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold shadow-sm transition-colors"
+										on:click={() => handleCancelPeminjaman(selectedItem)}
 										>Batalkan Peminjaman</button
 									>
 								</div>
@@ -1011,6 +1067,36 @@
 					{/if}
 				</div>
 			</div>
+		</div>
+	</div>
+
+	<!-- Color Picker Boxes -->
+	<div class="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
+		<label class="block text-sm font-medium text-gray-700 mb-3">Pilih Warna Background</label>
+		<div class="flex gap-3 flex-wrap">
+			{#each colorOptions as colorOpt}
+				<button
+					on:click={() => (selectedGradient = colorOpt.gradient)}
+					class={`relative w-12 h-12 rounded-lg ${colorOpt.preview} border-2 hover:scale-105 transition-transform duration-200 ${selectedGradient === colorOpt.gradient ? 'border-gray-800 ring-2 ring-gray-400' : 'border-gray-300'}`}
+					title={colorOpt.name}
+				>
+					{#if selectedGradient === colorOpt.gradient}
+						<div class="absolute inset-0 flex items-center justify-center">
+							<svg
+								class="w-5 h-5 text-white drop-shadow-lg"
+								fill="currentColor"
+								viewBox="0 0 20 20"
+							>
+								<path
+									fill-rule="evenodd"
+									d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+									clip-rule="evenodd"
+								></path>
+							</svg>
+						</div>
+					{/if}
+				</button>
+			{/each}
 		</div>
 	</div>
 
@@ -1528,7 +1614,7 @@
 		div[style*='width:62%'] {
 			min-width: 0 !important;
 			max-width: 100% !important;
-			width: 100% !important;
+					width: 100% !important;
 		}
 	}
 	@media (max-width: 768px) {

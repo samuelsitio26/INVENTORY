@@ -4,6 +4,7 @@
 	import StockStats from '$lib/components/inventory/StockStats.svelte';
 	import ConfirmDialog from '$lib/components/inventory/confirm/ConfirmDialog.svelte';
 	import AddToStockDialog from '$lib/components/inventory/confirm/AddToStockDialog.svelte';
+	import QuickAddToStockDialog from '$lib/components/inventory/confirm/QuickAddToStockDialog.svelte';
 	import EditStockDialog from '$lib/components/inventory/confirm/EditStockDialog.svelte';
 	import { stockStore, stockStats } from '$lib/stores/inventory.js';
 	import { searchTerm } from '$lib/stores/search.js';
@@ -13,6 +14,7 @@
 	let toast = { show: false, message: '', type: 'success' };
 	let confirmDialog = { show: false, message: '', id: null, name: '', type: 'received' };
 	let addToStockDialog = { show: false, selectedItem: null };
+	let quickAddToStockDialog = { show: false, selectedItem: null };
 	let editStockDialog = { show: false, selectedItem: null };
 
 	// State untuk data
@@ -55,6 +57,29 @@
 			if (stock >= 1) return 'Low Stock';
 			return 'Out of Stock';
 		}
+	}
+
+	// Fungsi untuk auto-match identitas barang berdasarkan nama (sama seperti di QuickAddToStockDialog)
+	function autoMatchIdentitasBarang(itemName) {
+		if (!itemName || !identitasBarangList.length) {
+			return null;
+		}
+
+		// Cari exact match dulu
+		let found = identitasBarangList.find(
+			(b) => b.nama_barang_lengkap.toLowerCase() === itemName.toLowerCase()
+		);
+
+		// Jika tidak ada exact match, cari yang mengandung kata kunci
+		if (!found) {
+			found = identitasBarangList.find(
+				(b) =>
+					b.nama_barang_lengkap.toLowerCase().includes(itemName.toLowerCase()) ||
+					itemName.toLowerCase().includes(b.nama_barang_lengkap.toLowerCase())
+			);
+		}
+
+		return found;
 	}
 
 	async function loadData() {
@@ -121,14 +146,37 @@
 			const barangData = await barangResponse.json();
 			console.log('Barang Data:', barangData.data); // Debug API response
 
-			// Mapping data items
-			const mappedItems = itemsData.data.map((item) => ({
-				id: item.id,
-				name: item.nama_barang,
-				quantity: parseInt(item.quantity) || 0,
-				units: item.units || 'Unknown',
-				department: item.request_id?.department || 'Inventory'
-			}));
+			// Mapping data items dengan kategori dan sub kategori
+			const mappedItems = itemsData.data.map((item) => {
+				// Auto-match identitas barang untuk mendapatkan kategori
+				const matchedIdentitas = autoMatchIdentitasBarang(item.nama_barang);
+
+				let category = 'Unknown';
+				let subCategory = 'Unknown';
+
+				if (matchedIdentitas) {
+					// Cari nama kategori dan sub kategori berdasarkan ID
+					const parentCat = parentCategories.find(
+						(cat) => cat.id === matchedIdentitas.parent_category
+					);
+					const subCat = subCategories.find((cat) => cat.id === matchedIdentitas.sub_category);
+
+					category = parentCat ? parentCat.parent_category : 'Unknown';
+					subCategory = subCat ? subCat.nama_sub : 'Unknown';
+				}
+
+				return {
+					id: item.id,
+					name: item.nama_barang,
+					quantity: parseInt(item.quantity) || 0,
+					units: item.units || 'Unknown',
+					department: item.request_id?.department || 'Inventory',
+					category: category,
+					subCategory: subCategory,
+					// Simpan data untuk keperluan debugging
+					matchedIdentitas: matchedIdentitas
+				};
+			});
 
 			// Simpan data items ke stockStore
 			stockStore.set({ items: mappedItems, originalItems: mappedItems, loading: false });
@@ -213,6 +261,10 @@
 		addToStockDialog = { show: true, selectedItem: item };
 	}
 
+	function quickAddToStock(item) {
+		quickAddToStockDialog = { show: true, selectedItem: item };
+	}
+
 	async function handleAddToStock({ detail }) {
 		try {
 			console.log('Detail received:', detail); // Debug data yang diterima
@@ -280,6 +332,80 @@
 		} finally {
 			addToStockDialog = { show: false, selectedItem: null };
 		}
+	}
+
+	// Handler untuk Quick Add To Stock (sama seperti handleAddToStock)
+	async function handleQuickAddToStock({ detail }) {
+		try {
+			console.log('Quick Add Detail received:', detail);
+
+			const parentCatId = detail.parent_category;
+			const subCatId = detail.sub_category;
+
+			// Gunakan nama field sesuai Directus
+			const payload = {
+				Nama: detail.name || '-',
+				Deskripsi: detail.detail || 'Tidak ada deskripsi',
+				StokIn: detail.stockIn || 0,
+				Status: detail.status || 'Unknown',
+				parent_category: parentCatId,
+				sub_category: subCatId
+			};
+
+			const response = await fetch('https://directus.eltamaprimaindo.com/items/Barang', {
+				method: 'POST',
+				headers: {
+					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(payload)
+			});
+
+			if (!response.ok) {
+				const errorText = await response.text();
+				throw new Error(`Gagal menyimpan ke stok: ${errorText}`);
+			}
+
+			const newItem = await response.json();
+			stockedItems = [
+				{
+					id: newItem.data.id,
+					name: payload.Nama,
+					description: payload.Deskripsi,
+					stockIn: payload.StokIn,
+					status: payload.Status,
+					parent_category:
+						parentCategories.find((cat) => cat.id === parentCatId)?.parent_category || 'Unknown',
+					sub_category: subCategories.find((cat) => cat.id === subCatId)?.nama_sub || 'Unknown'
+				},
+				...stockedItems
+			];
+
+			addedToStockIds = [...addedToStockIds, detail.id];
+
+			toast = {
+				show: true,
+				message: '🚀 Barang berhasil ditambahkan ke stok dengan Quick Add!',
+				type: 'success'
+			};
+			setTimeout(() => {
+				toast.show = false;
+			}, 2000);
+		} catch (err) {
+			toast = { show: true, message: 'Error: ' + err.message, type: 'error' };
+			setTimeout(() => {
+				toast.show = false;
+			}, 3000);
+			console.error('Error details:', err);
+		} finally {
+			quickAddToStockDialog = { show: false, selectedItem: null };
+		}
+	}
+
+	// Handler untuk beralih dari Quick Add ke Advanced Add
+	function handleQuickToAdvanced(item) {
+		quickAddToStockDialog = { show: false, selectedItem: null };
+		addToStockDialog = { show: true, selectedItem: item };
 	}
 
 	async function deleteItem(id, name) {
@@ -459,15 +585,12 @@
 	async function handleDeleteStockItem(id) {
 		try {
 			// Hapus dari database Directus
-			const response = await fetch(
-				`https://directus.eltamaprimaindo.com/items/Barang/${id}`,
-				{
-					method: 'DELETE',
-					headers: {
-						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
-					}
+			const response = await fetch(`https://directus.eltamaprimaindo.com/items/Barang/${id}`, {
+				method: 'DELETE',
+				headers: {
+					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
 				}
-			);
+			});
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -489,20 +612,19 @@
 				outOfStockItems
 			});
 
-			toast = { 
-				show: true, 
-				message: 'Barang berhasil dihapus dari stok!', 
-				type: 'success' 
+			toast = {
+				show: true,
+				message: 'Barang berhasil dihapus dari stok!',
+				type: 'success'
 			};
 			setTimeout(() => {
 				toast.show = false;
 			}, 2000);
-
 		} catch (err) {
-			toast = { 
-				show: true, 
-				message: 'Error: ' + err.message, 
-				type: 'error' 
+			toast = {
+				show: true,
+				message: 'Error: ' + err.message,
+				type: 'error'
 			};
 			setTimeout(() => {
 				toast.show = false;
@@ -720,7 +842,19 @@
 		on:cancel={handleCancelDelete}
 	/>
 
-	<!-- Add to Stock Dialog -->
+	<!-- Quick Add to Stock Dialog (Primary) -->
+	<QuickAddToStockDialog
+		bind:show={quickAddToStockDialog.show}
+		selectedItem={quickAddToStockDialog.selectedItem}
+		{identitasBarangList}
+		{parentCategories}
+		{subCategories}
+		on:confirm={handleQuickAddToStock}
+		on:cancel={() => (quickAddToStockDialog = { show: false, selectedItem: null })}
+		on:advanced={(e) => handleQuickToAdvanced(e.detail)}
+	/>
+
+	<!-- Add to Stock Dialog (Advanced) -->
 	<AddToStockDialog
 		bind:show={addToStockDialog.show}
 		stockItems={items}
@@ -993,7 +1127,7 @@
 					{totalFilteredItems} dari {items.length} barang
 				</div>
 			</div>
-			<StockTable stock={paginatedItems} {deleteItem} {addToStock} {addedToStockIds} />
+			<StockTable stock={paginatedItems} {addToStock} {quickAddToStock} {addedToStockIds} />
 
 			<!-- Paginasi untuk Barang Diterima -->
 			{#if totalFilteredItems > 0}
