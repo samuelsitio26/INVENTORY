@@ -8,7 +8,8 @@
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
 		{ path: '/inventory', label: 'Inventory', icon: '📦' },
-		{ path: '/inventory/rental', label: 'Rental', icon: '📋' }
+		{ path: '/inventory/rental', label: 'Rental', icon: '📋' },
+		{ path: '/inventory/finishedgood', label: 'Finish Good', icon: '🏷️' },
 	];
 
 	// State for user
