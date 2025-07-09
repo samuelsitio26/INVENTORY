@@ -10,6 +10,7 @@
 		{ path: '/inventory', label: 'Inventory', icon: '📦' },
 		{ path: '/inventory/rental', label: 'Rental', icon: '📋' },
 		{ path: '/inventory/finishedgood', label: 'Finish Good', icon: '🏷️' },
+		{ path: '/inventory/rawmaterial', label: 'Raw Material', icon: '🧱' },
 	];
 
 	// State for user
