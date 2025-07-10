@@ -4,6 +4,7 @@
 	export let reminders = [];
 	export let lateItems = [];
 	export let waitingApprovalItems = [];
+	export let spkNotifications = [];
 
 	let open = false;
 	const dispatch = createEventDispatcher();
@@ -25,6 +26,14 @@
 		if (open && event.key === 'Escape') {
 			open = false;
 		}
+	}
+
+	function handleSPKAction(notificationId, spkId, action) {
+		dispatch('spkAction', {
+			notificationId,
+			spkId,
+			action
+		});
 	}
 
 	onMount(() => {
@@ -56,11 +65,11 @@
 				d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
 			/>
 		</svg>
-		{#if reminders.length + lateItems.length + waitingApprovalItems.length > 0}
+		{#if reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length > 0}
 			<span
 				class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold animate-pulse"
 			>
-				{reminders.length + lateItems.length + waitingApprovalItems.length}
+				{reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length}
 			</span>
 		{/if}
 	</button>
@@ -71,22 +80,68 @@
 				<div class="flex border-b">
 					<button
 						class="flex-1 py-3 text-sm font-bold border-b-2"
+						class:text-blue-600={tab === 'spk'}
+						class:border-b-blue-600={tab === 'spk'}
+						on:click={() => (tab = 'spk')}>SPK Approval</button
+					>
+					<button
+						class="flex-1 py-3 text-sm font-bold border-b-2"
 						class:text-blue-600={tab === 'late'}
+						class:border-b-blue-600={tab === 'late'}
 						on:click={() => (tab = 'late')}>Terlambat</button
 					>
 					<button
 						class="flex-1 py-3 text-sm font-bold border-b-2"
 						class:text-blue-600={tab === 'approval'}
-						on:click={() => (tab = 'approval')}>Menunggu Approval</button
+						class:border-b-blue-600={tab === 'approval'}
+						on:click={() => (tab = 'approval')}>Rental Approval</button
 					>
 					<button
 						class="flex-1 py-3 text-sm font-bold border-b-2"
 						class:text-blue-600={tab === 'reminder'}
-						on:click={() => (tab = 'reminder')}>Jatuh Tempo Besok</button
+						class:border-b-blue-600={tab === 'reminder'}
+						on:click={() => (tab = 'reminder')}>Jatuh Tempo</button
 					>
 				</div>
 				<div class="p-4 max-h-80 overflow-y-auto">
-					{#if tab === 'late'}
+					{#if tab === 'spk'}
+						{#if spkNotifications.length === 0}
+							<div class="text-gray-400 text-sm text-center">Tidak ada SPK menunggu approval</div>
+						{:else}
+							{#each spkNotifications as notification}
+								<div class="mb-3 p-3 rounded bg-blue-50 border border-blue-100">
+									<div class="font-semibold text-blue-700">{notification.title}</div>
+									<div class="text-xs text-gray-600 mt-1">{notification.message}</div>
+									<div class="text-xs text-gray-500 mt-1">
+										SPK: {notification.spk_nomor} | {notification.nama_formula}
+									</div>
+									<div class="text-xs text-gray-500">
+										Jumlah: {notification.jumlah_produksi} {notification.unit}
+									</div>
+									<div class="flex space-x-2 mt-2">
+										<button
+											on:click={() => handleSPKAction(notification.id, notification.spk_id, 'approve')}
+											class="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+										>
+											Approve
+										</button>
+										<button
+											on:click={() => handleSPKAction(notification.id, notification.spk_id, 'reject')}
+											class="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+										>
+											Reject
+										</button>
+										<a 
+											href="/inventory/spk-notifications/{notification.id}"
+											class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+										>
+											Detail
+										</a>
+									</div>
+								</div>
+							{/each}
+						{/if}
+					{:else if tab === 'late'}
 						{#if lateItems.length === 0}
 							<div class="text-gray-400 text-sm text-center">Tidak ada barang terlambat</div>
 						{:else}
