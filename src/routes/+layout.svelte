@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { searchTerm } from '$lib/stores/search.js';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
+	import { getSPKNotifications, approveSPKNotification, rejectSPKNotification } from '$lib/services/notifications.js';
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -11,6 +12,7 @@
 		{ path: '/inventory/rental', label: 'Rental', icon: '📋' },
 		{ path: '/inventory/finishedgood', label: 'Finish Good', icon: '🏷️' },
 		{ path: '/inventory/rawmaterial', label: 'Raw Material', icon: '🧱' },
+		{ path: '/inventory/spk-notifications', label: 'SPK Notifications', icon: '🔔' },
 	];
 
 	// State for user
@@ -21,6 +23,7 @@
 	let reminders = [];
 	let lateItems = [];
 	let waitingApprovalItems = [];
+	let spkNotifications = [];
 	let rentalData = [];
 
 	onMount(() => {
@@ -89,6 +92,14 @@
 				dueDate.getDate() === besok.getDate()
 			);
 		});
+	}
+	function calculateLateDays(tanggalJatuhTempo) {
+		if (!tanggalJatuhTempo) return 0;
+		const today = new Date();
+		const dueDate = new Date(tanggalJatuhTempo);
+		const diffTime = Math.abs(today - dueDate);
+		const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+		return diffDays;
 	}
 	function getApprovalStage(item) {
 		if (!item.approvals?.dept) return 'dept';
@@ -165,12 +176,68 @@
 		});
 	}
 
+	async function fetchSPKNotifications() {
+		try {
+			const response = await fetch(
+				'https://directus.eltamaprimaindo.com/items/spk_notifications?fields=*,user_id.email,user_id.nama_lengkap',
+				{
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
+						'Content-Type': 'application/json'
+					}
+				}
+			);
+			if (!response.ok) return [];
+			const result = await response.json();
+			if (!result.data) return [];
+			return result.data.map((item) => ({
+				id: item.id,
+				judul: item.judul,
+				isi: item.isi,
+				tanggal: formatDate(item.tanggal),
+				status: item.status,
+				user: item.user_id ? `${item.user_id.nama_lengkap} (${item.user_id.email})` : '-'
+			}));
+		} catch (e) {
+			return [];
+		}
+	}
+
 	onMount(async () => {
 		rentalData = await fetchRentalData();
 		reminders = getReminders(rentalData);
 		lateItems = getLateItems(rentalData);
 		waitingApprovalItems = getWaitingApprovalItems(rentalData);
+		
+		// Load SPK notifications
+		try {
+			spkNotifications = await getSPKNotifications();
+			console.log('SPK notifications loaded in layout:', spkNotifications.length);
+		} catch (error) {
+			console.error('Error loading SPK notifications in layout:', error);
+			spkNotifications = [];
+		}
 	});
+
+	// Handle SPK actions from NotificationBell
+	async function handleSPKAction(event) {
+		const { notificationId, spkId, action } = event.detail;
+		
+		try {
+			if (action === 'approve') {
+				await approveSPKNotification(spkId);
+				console.log('SPK approved:', spkId);
+			} else if (action === 'reject') {
+				await rejectSPKNotification(spkId);
+				console.log('SPK rejected:', spkId);
+			}
+			
+			// Reload SPK notifications after action
+			spkNotifications = await getSPKNotifications();
+		} catch (error) {
+			console.error('Error handling SPK action:', error);
+		}
+	}
 </script>
 
 {#if $page.url.pathname !== '/login'}
@@ -443,7 +510,13 @@
 						</div>
 
 						<!-- Notification Bell -->
-						<NotificationBell {reminders} {lateItems} {waitingApprovalItems} />
+						<NotificationBell 
+							{reminders} 
+							{lateItems} 
+							{waitingApprovalItems} 
+							{spkNotifications}
+							on:spkAction={handleSPKAction} 
+						/>
 					</div>
 				</div>
 			</div>
