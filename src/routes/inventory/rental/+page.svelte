@@ -72,22 +72,13 @@
 		return formatDate(date.toISOString());
 	}
 
-	// Fetch data dari Directus - gabungan SPK dan inventory requests
-	async function fetchApprovalData() {
+	// Fetch data dari Directus dengan informasi lengkap
+	async function fetchRentalData() {
 		try {
-			console.log('Fetching approval data from Directus...');
+			console.log('Fetching rental data from Directus...');
 
-			// Fetch data SPK (Surat Perintah Kerja) untuk raw material
-			const spkResponse = await fetch('https://directus.eltamaprimaindo.com/items/spk?fields=*', {
-				headers: {
-					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
-					'Content-Type': 'application/json'
-				}
-			});
-
-			// Fetch data inventory requests untuk sparepart/maintenance
-			const inventoryResponse = await fetch(
-				'https://directus.eltamaprimaindo.com/items/inventory_requests?fields=*',
+			const response = await fetch(
+				'https://directus.eltamaprimaindo.com/items/rentals?fields=*,barang_id.id,barang_id.Nama,barang_id.StokIn,barang_id.parent_category.parent_category,barang_id.sub_category.nama_sub',
 				{
 					headers: {
 						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
@@ -96,163 +87,128 @@
 				}
 			);
 
-			if (!spkResponse.ok) {
-				console.error('SPK API Error:', await spkResponse.text());
-			}
-			if (!inventoryResponse.ok) {
-				console.error('Inventory API Error:', await inventoryResponse.text());
-			}
+			console.log('Response status:', response.status);
+			console.log('Response headers:', response.headers);
 
-			let combinedData = [];
-
-			// Process SPK data (Raw Material untuk Produksi)
-			if (spkResponse.ok) {
-				const spkResult = await spkResponse.json();
-				console.log('SPK Response:', spkResult);
-
-				const spkData =
-					spkResult.data?.map((item) => ({
-						id: `spk_${item.id}`,
-						originalId: item.id,
-						type: 'SPK',
-						department: 'Produksi',
-						namaBarang: item.nama_material || item.description || 'Raw Material',
-						kategori: 'Raw Material',
-						subKategori: item.kategori || 'Production',
-						peminjam: item.requestor || item.created_by || 'Produksi Team',
-						quantity: item.quantity || 1,
-						unit: item.unit || 'pcs',
-						tanggalPinjam: formatDate(item.date_created || item.tanggal_spk),
-						durasiPinjam: `${item.duration || 1} hari`,
-						tanggalJatuhTempo: calculateDueDate(
-							item.date_created || item.tanggal_spk,
-							item.duration || 1
-						),
-						status: item.status || 'Pending',
-						approvals: item.approvals || {},
-						keterangan: item.keterangan || item.notes || '-',
-						priority: item.priority || 'Normal'
-					})) || [];
-
-				combinedData = [...combinedData, ...spkData];
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.error('API Error Response:', errorText);
+				throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
 			}
 
-			// Process Inventory Requests (Sparepart untuk Maintenance)
-			if (inventoryResponse.ok) {
-				const inventoryResult = await inventoryResponse.json();
-				console.log('Inventory Response:', inventoryResult);
+			const result = await response.json();
+			console.log('API Response:', result);
 
-				const inventoryData =
-					inventoryResult.data?.map((item) => ({
-						id: `inv_${item.id}`,
-						originalId: item.id,
-						type: 'INVENTORY',
-						department: 'Maintenance',
-						namaBarang: item.item_name || item.nama_barang || 'Sparepart',
-						kategori: item.category || 'Sparepart',
-						subKategori: item.sub_category || 'Maintenance',
-						peminjam: item.requestor || item.maintenance_team || 'Maintenance Team',
-						quantity: item.quantity || 1,
-						unit: item.unit || 'pcs',
-						tanggalPinjam: formatDate(item.date_created || item.request_date),
-						durasiPinjam: `${item.duration || 7} hari`,
-						tanggalJatuhTempo: calculateDueDate(
-							item.date_created || item.request_date,
-							item.duration || 7
-						),
-						status: item.status || 'Pending',
-						approvals: item.approvals || {},
-						keterangan: item.notes || item.description || '-',
-						priority: item.priority || 'Normal'
-					})) || [];
-
-				combinedData = [...combinedData, ...inventoryData];
+			if (!result.data) {
+				console.warn('No data property in response:', result);
+				return [];
 			}
 
-			console.log('Combined Data:', combinedData);
-			return combinedData;
-		} catch (error) {
-			console.error('Error fetching approval data:', error);
+			return result.data.map((item, index) => {
+				console.log(`Processing item ${index + 1}:`, item);
+
+				const returnStatus = calculateReturnStatus(
+					item.borrow_date,
+					item.duration,
+					item.actual_return_date,
+					item.returned
+				);
+
+				// Penentuan status baru: Pending, Approved, Dipinjam, Dikembalikan
+				let status = 'Pending';
+				if (item.approved) {
+					status = 'Approved';
+				}
+				if (item.returned) {
+					status = 'Dikembalikan';
+				} else if (item.borrowed) {
+					status = 'Dipinjam';
+				}
+
+				return {
+					id: item.id || `temp-${index}`,
+					nama: item.barang_id?.Nama || '-',
+					kategori: item.barang_id?.parent_category?.parent_category || '-',
+					subKategori: item.barang_id?.sub_category?.nama_sub || '-',
+					qty: item.qty ?? '-',
+					peminjam: item.borrower || '-',
+					tanggalPinjam: formatDate(item.borrow_date),
+					tanggalJatuhTempo: calculateDueDate(item.borrow_date, item.duration),
+					durasiPinjam: item.duration ? `${item.duration} hari` : '-',
+					tanggalKembaliAktual: item.actual_return_date ? formatDate(item.actual_return_date) : '-',
+					status,
+					statusPengembalian: returnStatus,
+					kondisiKembali: item.return_condition || '-',
+					keterangan: item.return_notes || '-',
+					undoUntil: null,
+					approvals: item.approvals || {},
+					// Raw data untuk keperluan lain
+					rawBorrowDate: item.borrow_date,
+					rawDuration: item.duration,
+					rawActualReturnDate: item.actual_return_date
+				};
+			});
+		} catch (e) {
+			console.error('Error fetch rental:', e);
 			// Return sample data untuk testing jika API gagal
 			return [
 				{
-					id: 'spk_sample_1',
-					originalId: 'S001',
-					type: 'SPK',
-					department: 'Produksi',
-					namaBarang: 'Bahan Baku Aluminium',
-					kategori: 'Raw Material',
-					subKategori: 'Logam',
-					peminjam: 'Tim Produksi A',
-					quantity: 100,
-					unit: 'kg',
-					tanggalPinjam: formatDate(new Date().toISOString()),
-					durasiPinjam: '3 hari',
-					tanggalJatuhTempo: calculateDueDate(new Date().toISOString(), 3),
+					id: 'sample-1',
+					nama: 'Laptop Dell',
+					kategori: 'Elektronik',
+					subKategori: 'Komputer',
+					qty: 1,
+					peminjam: 'John Doe',
+					tanggalPinjam: '20-06-2025',
+					tanggalJatuhTempo: '27-06-2025',
+					durasiPinjam: '7 hari',
+					tanggalKembaliAktual: '-',
 					status: 'Pending',
+					statusPengembalian: '-',
+					kondisiKembali: '-',
+					keterangan: 'Untuk presentasi client',
+					undoUntil: null,
 					approvals: {},
-					keterangan: 'Untuk produksi order PO-2025-001',
-					priority: 'High'
+					rawBorrowDate: '2025-06-20',
+					rawDuration: 7,
+					rawActualReturnDate: null
 				},
 				{
-					id: 'inv_sample_1',
-					originalId: 'I001',
-					type: 'INVENTORY',
-					department: 'Maintenance',
-					namaBarang: 'Bearing 6205',
-					kategori: 'Sparepart',
-					subKategori: 'Bearing',
-					peminjam: 'Maintenance Team',
-					quantity: 2,
-					unit: 'pcs',
-					tanggalPinjam: formatDate(new Date().toISOString()),
-					durasiPinjam: '1 hari',
-					tanggalJatuhTempo: calculateDueDate(new Date().toISOString(), 1),
-					status: 'Pending',
-					approvals: {
-						dept: {
-							by: 'managerdept@eltama.com',
-							name: 'Manager Dept',
-							at: new Date().toISOString()
-						}
-					},
-					keterangan: 'Untuk maintenance mesin produksi line 1',
-					priority: 'Normal'
-				},
-				{
-					id: 'spk_sample_2',
-					originalId: 'S002',
-					type: 'SPK',
-					department: 'Produksi',
-					namaBarang: 'Plastik HDPE',
-					kategori: 'Raw Material',
-					subKategori: 'Plastik',
-					peminjam: 'Tim Produksi B',
-					quantity: 50,
-					unit: 'kg',
-					tanggalPinjam: formatDate(new Date().toISOString()),
-					durasiPinjam: '2 hari',
-					tanggalJatuhTempo: calculateDueDate(new Date().toISOString(), 2),
+					id: 'sample-2',
+					nama: 'Projector Epson',
+					kategori: 'Elektronik',
+					subKategori: 'Presentasi',
+					qty: 1,
+					peminjam: 'Jane Smith',
+					tanggalPinjam: '15-06-2025',
+					tanggalJatuhTempo: '22-06-2025',
+					durasiPinjam: '7 hari',
+					tanggalKembaliAktual: '21-06-2025',
 					status: 'Approved',
+					statusPengembalian: { status: 'Tepat Waktu', class: 'bg-green-100 text-green-800' },
+					kondisiKembali: 'Baik',
+					keterangan: 'Dikembalikan dalam kondisi baik',
+					undoUntil: null,
 					approvals: {
 						dept: {
 							by: 'managerdept@eltama.com',
 							name: 'Manager Dept',
-							at: new Date().toISOString()
+							at: '2025-06-27T10:00:00Z'
 						},
 						inventory: {
 							by: 'inventoryadmin@eltama.com',
 							name: 'Inventory Manager',
-							at: new Date().toISOString()
+							at: '2025-06-27T11:00:00Z'
 						},
 						procurement: {
 							by: 'procurementmanager@eltama.com',
 							name: 'Procurement Manager',
-							at: new Date().toISOString()
+							at: '2025-06-27T12:00:00Z'
 						}
 					},
-					keterangan: 'Untuk produksi order PO-2025-002',
-					priority: 'Normal'
+					rawBorrowDate: '2025-06-15',
+					rawDuration: 7,
+					rawActualReturnDate: '2025-06-21'
 				}
 			];
 		}
@@ -261,11 +217,11 @@
 	onMount(async () => {
 		try {
 			console.log('Component mounted, fetching data...');
-			data = await fetchApprovalData();
+			data = await fetchRentalData();
 			console.log('Data loaded:', data);
 		} catch (e) {
 			console.error('Error in onMount:', e);
-			error = e.message || 'Gagal mengambil data approval';
+			error = e.message || 'Gagal mengambil data rental';
 		} finally {
 			loading = false;
 		}
@@ -353,10 +309,8 @@
 	async function handleApprove(item) {
 		const idx = data.findIndex((d) => d.id === item.id);
 		if (idx === -1) return;
-
 		const now = new Date().toISOString();
 		if (!data[idx].approvals) data[idx].approvals = {};
-
 		const stage = getApprovalStage(data[idx]);
 		if (stage === 'dept') {
 			data[idx].approvals.dept = { by: user.email, name: user.name, at: now };
@@ -366,99 +320,26 @@
 			data[idx].approvals.procurement = { by: user.email, name: user.name, at: now };
 		}
 
-		// Simpan ke backend Directus - endpoint berbeda untuk SPK dan inventory_requests
+		// Simpan ke backend Directus
 		try {
-			let endpoint;
-			if (item.type === 'SPK') {
-				endpoint = `https://directus.eltamaprimaindo.com/items/spk/${item.originalId}`;
-			} else {
-				endpoint = `https://directus.eltamaprimaindo.com/items/inventory_requests/${item.originalId}`;
-			}
-
-			const response = await fetch(endpoint, {
+			await fetch(`https://directus.eltamaprimaindo.com/items/rentals/${item.id}`, {
 				method: 'PATCH',
 				headers: {
 					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
 					'Content-Type': 'application/json'
 				},
-				body: JSON.stringify({
-					approvals: data[idx].approvals,
-					status: getApprovalStage(data[idx]) === 'done' ? 'Approved' : 'Pending'
-				})
+				body: JSON.stringify({ approvals: data[idx].approvals })
 			});
-
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
-
 			// Refresh data agar approval stage update
-			data = await fetchApprovalData();
-
-			// Tampilkan notifikasi sukses
-			alert(
-				`Approval berhasil disimpan untuk ${item.type === 'SPK' ? 'SPK' : 'Request Inventory'}`
-			);
+			data = await fetchRentalData();
 		} catch (e) {
-			console.error('Error saving approval:', e);
-			alert(`Gagal menyimpan approval: ${e.message}`);
+			alert('Gagal menyimpan approval ke server!');
 		}
 	}
 	function handlePinjam(item) {
 		const idx = data.findIndex((d) => d.id === item.id);
 		if (idx !== -1) {
 			data[idx].status = 'Dipinjam';
-		}
-	}
-
-	async function handleReject(item, reason = '') {
-		const idx = data.findIndex((d) => d.id === item.id);
-		if (idx === -1) return;
-
-		const now = new Date().toISOString();
-		if (!data[idx].approvals) data[idx].approvals = {};
-
-		// Set rejection info
-		data[idx].approvals.rejected = {
-			by: user.email,
-			name: user.name,
-			at: now,
-			reason: reason || 'Tidak ada alasan'
-		};
-		data[idx].status = 'Rejected';
-
-		// Simpan ke backend Directus - endpoint berbeda untuk SPK dan inventory_requests
-		try {
-			let endpoint;
-			if (item.type === 'SPK') {
-				endpoint = `https://directus.eltamaprimaindo.com/items/spk/${item.originalId}`;
-			} else {
-				endpoint = `https://directus.eltamaprimaindo.com/items/inventory_requests/${item.originalId}`;
-			}
-
-			const response = await fetch(endpoint, {
-				method: 'PATCH',
-				headers: {
-					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					approvals: data[idx].approvals,
-					status: 'Rejected'
-				})
-			});
-
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
-
-			// Refresh data agar status update
-			data = await fetchApprovalData();
-
-			// Tampilkan notifikasi sukses
-			alert(`Request ${item.type === 'SPK' ? 'SPK' : 'Inventory'} berhasil ditolak`);
-		} catch (e) {
-			console.error('Error rejecting approval:', e);
-			alert(`Gagal menolak request: ${e.message}`);
 		}
 	}
 
@@ -507,7 +388,6 @@
 		if (status === 'Dept Approved') return 'bg-purple-100 text-purple-800 border-purple-300';
 		if (status === 'Inventory Approved') return 'bg-indigo-100 text-indigo-800 border-indigo-300';
 		if (status === 'Approved') return 'bg-green-100 text-green-800 border-green-300';
-		if (status === 'Rejected') return 'bg-red-100 text-red-800 border-red-300';
 		if (status === 'Dipinjam') return 'bg-blue-100 text-blue-800 border-blue-300';
 		if (status === 'Dikembalikan') return 'bg-gray-100 text-gray-700 border-gray-300';
 		return 'bg-gray-100 text-gray-700 border-gray-300';
@@ -531,11 +411,6 @@
 	});
 
 	function getStatusLabel(item) {
-		// Cek jika item ditolak
-		if (item.approvals?.rejected) {
-			return 'Rejected';
-		}
-
 		const stage = getApprovalStage(item);
 		if (stage === 'dept') return 'Pending';
 		if (stage === 'inventory') return 'Dept Approved';
@@ -600,13 +475,13 @@
 
 		// Redirect ke halaman edit atau buka modal edit
 		// Untuk sementara, tampilkan alert sebagai placeholder
-		alert(
-			`Edit peminjaman "${item.namaBarang}"\n\nFitur edit akan diarahkan ke halaman/modal edit peminjaman`
-		);
-
+		alert(`Edit peminjaman "${item.namaBarang}"\n\nFitur edit akan diarahkan ke halaman/modal edit peminjaman`);
+		
 		// TODO: Implementasi redirect atau modal edit
 		// goto(`/inventory/rental/edit/${item.id}`);
 	}
+
+	// ...existing code...
 </script>
 
 <div
@@ -617,191 +492,19 @@
 	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
 		<div>
 			<h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">
-				Sistem Approval Material & Sparepart
+				Procurement Peminjaman Barang
 			</h1>
-			<p class="mt-1 text-sm text-gray-500">
-				Approval untuk SPK Raw Material (Produksi) dan Sparepart (Maintenance)
-			</p>
+			<p class="mt-1 text-sm text-gray-500">Status procurement dan persetujuan peminjaman alat</p>
 		</div>
 		<div class="flex gap-2 mt-4 sm:mt-0">
 			<button
-				class="px-5 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow"
-				on:click={async () => {
-					loading = true;
-					try {
-						data = await fetchApprovalData();
-					} catch (e) {
-						error = e.message || 'Gagal memuat data approval';
-					} finally {
-						loading = false;
-					}
-				}}
+				class="px-5 py-3 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors shadow"
+				>Aksi Peminjaman</button
 			>
-				<svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-					></path>
-				</svg>
-				Refresh Data
-			</button>
-		</div>
-	</div>
-
-	<!-- Statistics Cards -->
-	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-		<!-- Card: Total Requests -->
-		<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-			<div class="flex items-center">
-				<div class="flex-shrink-0">
-					<div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-						<svg
-							class="w-5 h-5 text-blue-600"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							></path>
-						</svg>
-					</div>
-				</div>
-				<div class="ml-3">
-					<p class="text-sm font-medium text-gray-500">Total Requests</p>
-					<p class="text-2xl font-bold text-gray-900">{data.length}</p>
-				</div>
-			</div>
-		</div>
-
-		<!-- Card: Pending Approval -->
-		<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-			<div class="flex items-center">
-				<div class="flex-shrink-0">
-					<div class="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
-						<svg
-							class="w-5 h-5 text-yellow-600"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-							></path>
-						</svg>
-					</div>
-				</div>
-				<div class="ml-3">
-					<p class="text-sm font-medium text-gray-500">Pending Approval</p>
-					<p class="text-2xl font-bold text-gray-900">
-						{data.filter((item) => getApprovalStage(item) !== 'done' && !item.approvals?.rejected)
-							.length}
-					</p>
-				</div>
-			</div>
-		</div>
-
-		<!-- Card: Approved -->
-		<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-			<div class="flex items-center">
-				<div class="flex-shrink-0">
-					<div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-						<svg
-							class="w-5 h-5 text-green-600"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-							></path>
-						</svg>
-					</div>
-				</div>
-				<div class="ml-3">
-					<p class="text-sm font-medium text-gray-500">Approved</p>
-					<p class="text-2xl font-bold text-gray-900">
-						{data.filter((item) => getApprovalStage(item) === 'done').length}
-					</p>
-				</div>
-			</div>
-		</div>
-
-		<!-- Card: Rejected -->
-		<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-			<div class="flex items-center">
-				<div class="flex-shrink-0">
-					<div class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-						<svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-							></path>
-						</svg>
-					</div>
-				</div>
-				<div class="ml-3">
-					<p class="text-sm font-medium text-gray-500">Rejected</p>
-					<p class="text-2xl font-bold text-gray-900">
-						{data.filter((item) => item.approvals?.rejected).length}
-					</p>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div
-		class="mx-auto px-4 py-8"
-		style="max-width:1600px; font-size:1.1rem; margin-left:-50px; margin-right:-50px;"
-	>
-		<!-- Header -->
-		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-			<div>
-				<h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">
-					Sistem Approval Material & Sparepart
-				</h1>
-				<p class="mt-1 text-sm text-gray-500">
-					Approval untuk SPK Raw Material (Produksi) dan Sparepart (Maintenance)
-				</p>
-			</div>
-			<div class="flex gap-2 mt-4 sm:mt-0">
-				<button
-					class="px-5 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow"
-					on:click={async () => {
-						loading = true;
-						try {
-							data = await fetchApprovalData();
-						} catch (e) {
-							error = e.message || 'Gagal memuat data approval';
-						} finally {
-							loading = false;
-						}
-					}}
-				>
-					<svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-						></path>
-					</svg>
-					Refresh Data
-				</button>
-			</div>
+			<button
+				class="px-5 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow"
+				>Refresh</button
+			>
 		</div>
 	</div>
 
@@ -847,7 +550,8 @@
 							<option value="Dept Approved">Dept Approved</option>
 							<option value="Inventory Approved">Inventory Approved</option>
 							<option value="Approved">Approved</option>
-							<option value="Rejected">Rejected</option>
+							<option value="Dipinjam">Dipinjam</option>
+							<option value="Dikembalikan">Dikembalikan</option>
 						</select>
 						<input
 							type="text"
@@ -869,10 +573,7 @@
 								selectedItem.id === item.id
 									? 'ring-2 ring-blue-500 border-blue-400 shadow-lg bg-blue-50'
 									: 'hover:bg-gray-50'}"
-								role="button"
-								tabindex="0"
 								on:click={() => (selectedItem = item)}
-								on:keydown={(e) => e.key === 'Enter' && (selectedItem = item)}
 							>
 								<div
 									class="w-9 h-9 flex items-center justify-center rounded-full font-bold text-sm bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md"
@@ -931,12 +632,8 @@
 											</svg>
 										</div>
 										<div>
-											<h2 class="text-2xl font-bold text-gray-900">Detail Request</h2>
-											<p class="text-sm text-gray-600">
-												{selectedItem.type === 'SPK'
-													? 'Informasi SPK Raw Material'
-													: 'Informasi Request Sparepart'}
-											</p>
+											<h2 class="text-2xl font-bold text-gray-900">Detail Barang</h2>
+											<p class="text-sm text-gray-600">Informasi lengkap peminjaman</p>
 										</div>
 									</div>
 									<span
@@ -975,20 +672,16 @@
 												</svg>
 											</div>
 											<div>
-												<h3 class="text-lg font-bold text-gray-900">Informasi Material</h3>
-												<p class="text-xs text-gray-500">
-													{selectedItem.type === 'SPK'
-														? 'Raw Material untuk Produksi'
-														: 'Sparepart untuk Maintenance'}
-												</p>
+												<h3 class="text-lg font-bold text-gray-900">Informasi Barang</h3>
+												<p class="text-xs text-gray-500">Detail produk</p>
 											</div>
 										</div>
 										<div class="space-y-4">
 											<div class="p-3 bg-gray-50 rounded-xl">
 												<div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
-													{selectedItem.type === 'SPK' ? 'Nama Material' : 'Nama Sparepart'}
+													Nama Barang
 												</div>
-												<div class="font-bold text-gray-900 text-lg">{selectedItem.namaBarang}</div>
+												<div class="font-bold text-gray-900 text-lg">{selectedItem.nama}</div>
 											</div>
 											<div class="grid grid-cols-1 gap-3">
 												<div class="p-3 bg-blue-50 rounded-xl border border-blue-100">
@@ -1006,7 +699,7 @@
 														<div
 															class="text-xs font-medium text-purple-600 uppercase tracking-wide mb-1"
 														>
-															{selectedItem.type === 'SPK' ? 'Requestor' : 'Team Maintenance'}
+															Peminjam
 														</div>
 														<div class="text-sm text-gray-900 font-semibold">
 															{selectedItem.peminjam}
@@ -1016,11 +709,10 @@
 														<div
 															class="text-xs font-medium text-orange-600 uppercase tracking-wide mb-1"
 														>
-															Quantity
+															Jumlah
 														</div>
 														<div class="text-sm font-bold text-orange-700">
-															{selectedItem.quantity}
-															{selectedItem.unit}
+															{selectedItem.qty} Unit
 														</div>
 													</div>
 												</div>
@@ -1051,10 +743,8 @@
 												</svg>
 											</div>
 											<div>
-												<h3 class="text-lg font-bold text-gray-900">Timeline Request</h3>
-												<p class="text-xs text-gray-500">
-													{selectedItem.type === 'SPK' ? 'Jadwal SPK' : 'Jadwal Penggunaan'}
-												</p>
+												<h3 class="text-lg font-bold text-gray-900">Timeline</h3>
+												<p class="text-xs text-gray-500">Jadwal peminjaman</p>
 											</div>
 										</div>
 										<div class="space-y-4">
@@ -1316,83 +1006,38 @@
 								>
 									{#if canApprove(user, selectedItem)}
 										<button
-											class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-semibold shadow-sm transition-colors flex items-center gap-2"
-											on:click={() => handleApprove(selectedItem)}
+											class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold shadow-sm transition-colors"
+											on:click={() => handleApprove(selectedItem)}>Approve</button
 										>
-											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M5 13l4 4L19 7"
-												></path>
-											</svg>
-											Approve {selectedItem.type === 'SPK' ? 'SPK' : 'Request'}
-										</button>
-										<button
-											class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold shadow-sm transition-colors flex items-center gap-2"
-											on:click={() => {
-												const reason = prompt('Alasan penolakan (opsional):');
-												if (reason !== null) {
-													handleReject(selectedItem, reason);
-												}
-											}}
-										>
-											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M6 18L18 6M6 6l12 12"
-												></path>
-											</svg>
-											Reject {selectedItem.type === 'SPK' ? 'SPK' : 'Request'}
-										</button>
 									{:else if selectedItem.status === 'Approved'}
-										<div
-											class="px-4 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-semibold border border-green-200"
+										<button
+											class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-semibold shadow-sm transition-colors"
+											on:click={() => handlePinjam(selectedItem)}>Proses Peminjaman</button
 										>
-											✓ Request Telah Disetujui
-										</div>
-									{:else if selectedItem.approvals?.rejected}
-										<div
-											class="px-4 py-2 bg-red-100 text-red-800 rounded-lg text-sm font-semibold border border-red-200"
+									{:else if selectedItem.status === 'Dipinjam'}
+										<button
+											class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-semibold shadow-sm transition-colors"
+											on:click={() => handleReturn(selectedItem)}>Proses Pengembalian</button
 										>
-											✗ Request Ditolak: {selectedItem.approvals.rejected.reason}
-										</div>
-									{:else}
-										<div
-											class="px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg text-sm font-semibold border border-yellow-200"
-										>
-											⏳ Menunggu Approval dari {getApprovalStage(selectedItem) === 'dept'
-												? 'Manager Departemen'
-												: getApprovalStage(selectedItem) === 'inventory'
-													? 'Inventory Manager'
-													: getApprovalStage(selectedItem) === 'procurement'
-														? 'Procurement Manager'
-														: 'Unknown'}
-										</div>
 									{/if}
-
-									<!-- Tombol Info Detail -->
+									{#if canUndo(selectedItem)}
+										<button
+											class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-semibold shadow-sm transition-colors"
+											on:click={() => handleUndo(selectedItem)}
+											>Batalkan {getUndoCountdown(selectedItem)}</button
+										>
+									{/if}
+									<!-- Tombol Edit & Batalkan -->
 									<button
-										class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg border border-blue-200 text-sm font-semibold shadow-sm hover:bg-blue-200 transition-colors flex items-center gap-2"
-										on:click={() => {
-											alert(
-												`Detail ${selectedItem.type}:\n\nID: ${selectedItem.originalId}\nDepartment: ${selectedItem.department}\nPriority: ${selectedItem.priority}`
-											);
-										}}
+										class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg border text-sm font-semibold shadow-sm hover:bg-gray-300 transition-colors"
+										on:click={() => handleEditPeminjaman(selectedItem)}
+										>Edit Peminjaman</button
 									>
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-											></path>
-										</svg>
-										Info Detail
-									</button>
+									<button
+										class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold shadow-sm transition-colors"
+										on:click={() => handleCancelPeminjaman(selectedItem)}
+										>Batalkan Peminjaman</button
+									>
 								</div>
 							</div>
 						</div>
@@ -1427,7 +1072,7 @@
 
 	<!-- Color Picker Boxes -->
 	<div class="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
-		<div class="block text-sm font-medium text-gray-700 mb-3">Pilih Warna Background</div>
+		<label class="block text-sm font-medium text-gray-700 mb-3">Pilih Warna Background</label>
 		<div class="flex gap-3 flex-wrap">
 			{#each colorOptions as colorOpt}
 				<button
@@ -1789,10 +1434,11 @@
 										</div>
 									</div>
 									<div
-										class="flex items-center space-x-3 p-3 rounded-lg border {detailItem.approvals
-											?.procurement
-											? 'bg-green-50 border-green-200'
-											: 'bg-gray-50 border-gray-200'}"
+										class="flex items-center space-x-3 p-3 rounded-lg border"
+										class:bg-green-50={detailItem.approvals?.procurement}
+										class:bg-gray-50={!detailItem.approvals?.procurement}
+										class:border-green-200={detailItem.approvals?.procurement}
+										class:border-gray-200={!detailItem.approvals?.procurement}
 									>
 										<svg
 											class="w-5 h-5"
@@ -1964,10 +1610,11 @@
 			flex-direction: column !important;
 		}
 		/* Panel lebar penuh jika layar kecil */
-		div[style*='width:38%'] {
+		div[style*='width:38%'],
+		div[style*='width:62%'] {
 			min-width: 0 !important;
 			max-width: 100% !important;
-			width: 100% !important;
+					width: 100% !important;
 		}
 	}
 	@media (max-width: 768px) {

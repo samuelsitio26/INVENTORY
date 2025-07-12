@@ -31,6 +31,8 @@
 	"dependencies": {
 		"axios": "^1.9.0",
 		"firebase": "^11.9.1",
+		"jspdf": "^3.0.1",
+		"jspdf-autotable": "^5.0.2",
 		"svelte-select": "^5.8.3"
 	}
 }

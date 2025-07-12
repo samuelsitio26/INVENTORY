@@ -47,8 +47,8 @@
 	let saving = false;
 	
 	// Options for dropdowns
-	const divisiOptions = ['Food & Beverages', 'Chemicals', 'Textiles', 'Packaging', 'Others'];
-	const jenisOptions = ['Liquid', 'Powder', 'Solid', 'Paste', 'Granule'];
+	const divisiOptions = ['Food & Beverages', 'Chemicals', 'Textiles', 'Packaging', 'PRODUKSI',  'Others'];
+	const jenisOptions = ['Raw Material', 'Packing', 'Solid', 'Paste', 'Granule', 'BASE', 'BANGUNAN', 'ELECTRICAL', 'EQUIPMENT', 'INSPEKSI'];
 	const satuanOptions = ['Kg', 'Ltr', 'Pcs', 'Box', 'Bag', 'Drum'];
 
 	onMount(() => {
@@ -94,7 +94,7 @@
 			console.log('Original formData:', formData);
 			
 			// Validate required fields
-			if (!formData.kode || !formData.nama || !formData.kemasan || !formData.satuan) {
+			if (!formData.kode || !formData.nama || !formData.satuan) {
 				throw new Error('Mohon isi semua field yang wajib diisi');
 			}
 			
@@ -329,12 +329,11 @@
 							</div>
 							
 							<div>
-								<label for="kemasan" class="block text-sm font-medium text-gray-700 mb-1">Kemasan *</label>
+								<label for="kemasan" class="block text-sm font-medium text-gray-700 mb-1">Kemasan</label>
 								<input
 									id="kemasan"
 									type="text"
 									bind:value={formData.kemasan}
-									required
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 									placeholder="Contoh: Drum 200L"
 								/>
@@ -406,9 +405,8 @@
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 								>
 									<option value="">Pilih Satuan Stok</option>
-									{#each satuanOptions as option}
-										<option value={option}>{option}</option>
-									{/each}
+									<option value="Stok">Stok</option>
+									<option value="Non Stok">Non Stok</option>
 								</select>
 							</div>
 							
