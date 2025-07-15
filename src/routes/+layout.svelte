@@ -4,8 +4,17 @@
 	import { onMount } from 'svelte';
 	import { searchTerm } from '$lib/stores/search.js';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
+<<<<<<< Updated upstream
 	import { getSPKNotifications, approveSPKNotification, rejectSPKNotification } from '$lib/services/notifications.js';
 	import { productionRequests } from '$lib/stores/notifications.js';
+=======
+	import {
+		getSPKNotifications,
+		approveSPKNotification,
+		rejectSPKNotification
+	} from '$lib/services/notifications.js';
+	import { getRecentSOCustomer } from '$lib/services/socustomer.js';
+>>>>>>> Stashed changes
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -13,8 +22,12 @@
 		{ path: '/inventory/rental', label: 'Rental', icon: '📋' },
 		{ path: '/inventory/finishedgood', label: 'Finish Good', icon: '🏷️' },
 		{ path: '/inventory/rawmaterial', label: 'Raw Material', icon: '🧱' },
+<<<<<<< Updated upstream
 		{ path: '/inventory/spk-notifications', label: 'SPK Notifications', icon: '🔔' },
 		{ path: '/inventory/produksi-notifications', label: 'Produksi Notifications', icon: '🏭' },
+=======
+		{ path: '/inventory/spk-notifications', label: 'SPK Notifications', icon: '🔔' }
+>>>>>>> Stashed changes
 	];
 
 	// State for user
@@ -26,6 +39,7 @@
 	let lateItems = [];
 	let waitingApprovalItems = [];
 	let spkNotifications = [];
+	let soCustomerData = [];
 	let rentalData = [];
 	let productionRequestsData = [];
 	let finishedGoodsData = [];
@@ -268,11 +282,15 @@
 		reminders = getReminders(rentalData);
 		lateItems = getLateItems(rentalData);
 		waitingApprovalItems = getWaitingApprovalItems(rentalData);
+<<<<<<< Updated upstream
 		
 		// Load finished goods and production notifications
 		finishedGoodsData = await fetchFinishedGoods();
 		productionNotifications = getProductionNotifications(finishedGoodsData);
 		
+=======
+
+>>>>>>> Stashed changes
 		// Load SPK notifications
 		try {
 			spkNotifications = await getSPKNotifications();
@@ -281,12 +299,21 @@
 			console.error('Error loading SPK notifications in layout:', error);
 			spkNotifications = [];
 		}
+
+		// Load SO Customer data
+		try {
+			soCustomerData = await getRecentSOCustomer();
+			console.log('SO Customer data loaded in layout:', soCustomerData.length);
+		} catch (error) {
+			console.error('Error loading SO Customer data in layout:', error);
+			soCustomerData = [];
+		}
 	});
 
 	// Handle SPK actions from NotificationBell
 	async function handleSPKAction(event) {
 		const { notificationId, spkId, action } = event.detail;
-		
+
 		try {
 			if (action === 'approve') {
 				await approveSPKNotification(spkId);
@@ -295,7 +322,7 @@
 				await rejectSPKNotification(spkId);
 				console.log('SPK rejected:', spkId);
 			}
-			
+
 			// Reload SPK notifications after action
 			spkNotifications = await getSPKNotifications();
 		} catch (error) {
@@ -336,8 +363,12 @@
 									class="absolute inset-0 bg-white/10 rounded-2xl animate-pulse duration-2000"
 								></div>
 								<!-- <span class="relative text-3xl filter drop-shadow-lg"><img src="/Logo-Eltama-Prima-Indo-01.png" alt="Logo" class="w-16 h-16 mb-2 drop-shadow-lg" /></span>  rapihkan logo -->
-								<span class="relative text-3xl font-bold text-white"> 
-									<img src="/Logo-Eltama-Prima-Indo-01.png" alt="Logo" class="w-16 h-16 drop-shadow-lg" /> 
+								<span class="relative text-3xl font-bold text-white">
+									<img
+										src="/Logo-Eltama-Prima-Indo-01.png"
+										alt="Logo"
+										class="w-16 h-16 drop-shadow-lg"
+									/>
 								</span>
 							</div>
 						</div>
@@ -368,7 +399,7 @@
 								></div>
 								<span class="text-green-300 text-sm font-medium">System Online</span>
 							</div>
-						</div>
+						</div> 
 
 						<!-- Current Date & Time -->
 						<div
@@ -574,14 +605,19 @@
 						</div>
 
 						<!-- Notification Bell -->
-						<NotificationBell 
-							{reminders} 
-							{lateItems} 
-							{waitingApprovalItems} 
+						<NotificationBell
+							{reminders}
+							{lateItems}
+							{waitingApprovalItems}
 							{spkNotifications}
+<<<<<<< Updated upstream
 							{productionNotifications}
 							productionRequests={productionRequestsData}
 							on:spkAction={handleSPKAction} 
+=======
+							{soCustomerData}
+							on:spkAction={handleSPKAction}
+>>>>>>> Stashed changes
 						/>
 					</div>
 				</div>
