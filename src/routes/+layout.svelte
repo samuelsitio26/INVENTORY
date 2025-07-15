@@ -4,17 +4,9 @@
 	import { onMount } from 'svelte';
 	import { searchTerm } from '$lib/stores/search.js';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
-<<<<<<< Updated upstream
 	import { getSPKNotifications, approveSPKNotification, rejectSPKNotification } from '$lib/services/notifications.js';
 	import { productionRequests } from '$lib/stores/notifications.js';
-=======
-	import {
-		getSPKNotifications,
-		approveSPKNotification,
-		rejectSPKNotification
-	} from '$lib/services/notifications.js';
-	import { getRecentSOCustomer } from '$lib/services/socustomer.js';
->>>>>>> Stashed changes
+
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -22,12 +14,9 @@
 		{ path: '/inventory/rental', label: 'Rental', icon: '📋' },
 		{ path: '/inventory/finishedgood', label: 'Finish Good', icon: '🏷️' },
 		{ path: '/inventory/rawmaterial', label: 'Raw Material', icon: '🧱' },
-<<<<<<< Updated upstream
 		{ path: '/inventory/spk-notifications', label: 'SPK Notifications', icon: '🔔' },
 		{ path: '/inventory/produksi-notifications', label: 'Produksi Notifications', icon: '🏭' },
-=======
-		{ path: '/inventory/spk-notifications', label: 'SPK Notifications', icon: '🔔' }
->>>>>>> Stashed changes
+
 	];
 
 	// State for user
@@ -282,15 +271,12 @@
 		reminders = getReminders(rentalData);
 		lateItems = getLateItems(rentalData);
 		waitingApprovalItems = getWaitingApprovalItems(rentalData);
-<<<<<<< Updated upstream
 		
 		// Load finished goods and production notifications
 		finishedGoodsData = await fetchFinishedGoods();
 		productionNotifications = getProductionNotifications(finishedGoodsData);
 		
-=======
 
->>>>>>> Stashed changes
 		// Load SPK notifications
 		try {
 			spkNotifications = await getSPKNotifications();
@@ -610,14 +596,10 @@
 							{lateItems}
 							{waitingApprovalItems}
 							{spkNotifications}
-<<<<<<< Updated upstream
 							{productionNotifications}
 							productionRequests={productionRequestsData}
 							on:spkAction={handleSPKAction} 
-=======
-							{soCustomerData}
-							on:spkAction={handleSPKAction}
->>>>>>> Stashed changes
+
 						/>
 					</div>
 				</div>

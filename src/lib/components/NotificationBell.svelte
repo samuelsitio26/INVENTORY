@@ -5,12 +5,8 @@
 	export let lateItems = [];
 	export let waitingApprovalItems = [];
 	export let spkNotifications = [];
-<<<<<<< Updated upstream
 	export let productionRequests = [];
 	export let productionNotifications = [];
-=======
-	export let soCustomerData = [];
->>>>>>> Stashed changes
 
 	let open = false;
 	const dispatch = createEventDispatcher();
@@ -71,23 +67,12 @@
 				d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
 			/>
 		</svg>
-<<<<<<< Updated upstream
 		{#if reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length + productionRequests.length + productionNotifications.length > 0}
 			<span
 				class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold animate-pulse"
 			>
 				{reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length + productionRequests.length + productionNotifications.length}
-=======
-		{#if reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length + soCustomerData.length > 0}
-			<span
-				class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold animate-pulse"
-			>
-				{reminders.length +
-					lateItems.length +
-					waitingApprovalItems.length +
-					spkNotifications.length +
-					soCustomerData.length}
->>>>>>> Stashed changes
+
 			</span>
 		{/if}
 	</button>
@@ -158,14 +143,8 @@
 										>
 											Reject
 										</button>
-<<<<<<< Updated upstream
 										<a 
-											href="/inventory/spk-notifications/{notification.id}"
-=======
-										<a
-											href="/inventory/spk-notifications/{notification.spk_id}"
->>>>>>> Stashed changes
-											class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+											href="/inventory/spk-notifications/{notification.id}"											class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
 										>
 											Detail
 										</a>
