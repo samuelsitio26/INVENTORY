@@ -4,6 +4,7 @@
 	import { createSuratJalan, generateNomorSJ, getSuratJalan } from '$lib/services/suratjalan.js';
 	import { jsPDF } from 'jspdf';
 	import 'jspdf-autotable';
+	import { addProductionRequest } from '$lib/stores/notifications.js';
 
 	let loading = false;
 	let error = null;
@@ -51,6 +52,10 @@
 	let showSJList = false;
 	let suratJalanList = [];
 	let rawMaterials = []; // This would be populated from API
+	
+	// State for Production Request Modal
+	let showProductionRequestModal = false;
+	let productionRequestItems = [];
 	let sjFormData = {
 		kode_customer: '',
 		kode_sales: '',
@@ -132,20 +137,20 @@
 
 	function getColorCode(colorName) {
 		const colorMap = {
-			'Putih': '#ffffff',
-			'Coklat': '#8B4513',
-			'Abu-abu': '#808080',
-			'Hijau': '#008000',
-			'Biru': '#0000FF',
-			'Merah': '#FF0000',
-			'Kuning': '#FFFF00',
-			'Hitam': '#000000',
-			'Orange': '#FFA500',
-			'Ungu': '#800080',
-			'Pink': '#FFC0CB',
-			'Cream': '#F5F5DC',
-			'Silver': '#C0C0C0',
-			'Gold': '#FFD700'
+			'WHITE': '#ffffff',
+			'BROWN': '#8B4513',
+			'GREY': '#808080',
+			'GREEN': '#008000',
+			'BLUE': '#0000FF',
+			'RED': '#FF0000',
+			'YELLOW': '#FFFF00',
+			'BLACK': '#000000',
+			'ORANGE': '#FFA500',
+			'PURPLE': '#800080',
+			'PINK': '#FFC0CB',
+			'CREAM': '#F5F5DC',
+			'SILVER': '#C0C0C0',
+			'GOLD': '#FFD700'
 		};
 		return colorMap[colorName] || '#CCCCCC';
 	}
@@ -356,6 +361,15 @@
 				}
 			}, 100);
 		}
+	}
+
+	// Function to show production request modal
+	function showProductionRequestNotification(item) {
+		// Filter items that need production (Low Stock or Out of Stock)
+		productionRequestItems = finishedGoods.filter(fg => 
+			fg.status === 'Low Stock' || fg.status === 'Out of Stock'
+		);
+		showProductionRequestModal = true;
 	}
 
 	// Reactive statements
@@ -1983,6 +1997,12 @@
 									>
 										Edit
 									</button>
+									<button
+										class="px-2 py-1 bg-purple-500 text-white rounded-md hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-400 ml-2"
+										on:click={() => showProductionRequestNotification(item)}
+									>
+										Ajukan Produksi
+									</button>
 								</td>
 							</tr>
 						{/each}
@@ -2153,6 +2173,116 @@
 					>
 						Tutup
 					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Production Request Modal -->
+	{#if showProductionRequestModal}
+		<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+			<div class="bg-white p-6 rounded-lg shadow-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+				<div class="flex justify-between items-center mb-6">
+					<h2 class="text-xl font-bold text-gray-900">Permintaan Produksi</h2>
+					<button
+						class="text-gray-500 hover:text-gray-700"
+						on:click={() => showProductionRequestModal = false}
+						aria-label="Close"
+					>
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+						</svg>
+					</button>
+				</div>
+
+				<div class="mb-4">
+					<p class="text-gray-600">Berikut adalah daftar finished goods yang perlu diproduksi:</p>
+				</div>
+
+				{#if productionRequestItems.length === 0}
+					<div class="text-center py-8">
+						<p class="text-gray-500">Semua finished goods memiliki stok yang cukup.</p>
+					</div>
+				{:else}
+					<div class="overflow-x-auto">
+						<table class="min-w-full bg-white border border-gray-200">
+							<thead class="bg-gray-50">
+								<tr>
+									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kode Barang</th>
+									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Barang</th>
+									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Warna</th>
+									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sisa Stok</th>
+									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Formula</th>
+								</tr>
+							</thead>
+							<tbody class="bg-white divide-y divide-gray-200">
+								{#each productionRequestItems as item}
+									<tr class="hover:bg-gray-50">
+										<td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.kode_barang}</td>
+										<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.nama_barang}</td>
+										<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+											<div class="flex items-center">
+												<div class="w-4 h-4 rounded-full mr-2 border border-gray-300" style="background-color: {getColorCode(item.warna)};"></div>
+												{item.warna}
+											</div>
+										</td>
+										<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.sisa_stok}</td>
+										<td class="px-4 py-4 whitespace-nowrap">
+											<StatusBadge status={item.status} />
+										</td>
+										<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.nama_formula}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+
+					<div class="mt-6 p-4 bg-blue-50 rounded-lg">
+						<div class="flex">
+							<div class="text-blue-400">
+								<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+									<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+								</svg>
+							</div>
+							<div class="ml-3">
+								<h3 class="text-sm font-medium text-blue-800">Informasi</h3>
+								<div class="mt-2 text-sm text-blue-700">
+									<p>Terdapat {productionRequestItems.length} item yang perlu diproduksi. Silakan koordinasikan dengan tim produksi untuk melakukan produksi sesuai dengan formula yang tersedia.</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				{/if}
+
+				<div class="mt-6 flex justify-end gap-3">
+					<button
+						class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+						on:click={() => showProductionRequestModal = false}
+					>
+						Tutup
+					</button>
+					{#if productionRequestItems.length > 0}
+						<button
+							class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+							on:click={() => {
+								// Add notification to the notification bell
+								addProductionRequest(productionRequestItems);
+								
+								// Show success toast
+								toast = { 
+									show: true, 
+									message: `Permintaan produksi untuk ${productionRequestItems.length} item telah dikirim ke tim produksi dan ditambahkan ke notifikasi`,
+									type: 'success' 
+								};
+								setTimeout(() => toast.show = false, 5000);
+								
+								showProductionRequestModal = false;
+							}}
+						>
+							Kirim Permintaan
+						</button>
+					{/if}
 				</div>
 			</div>
 		</div>

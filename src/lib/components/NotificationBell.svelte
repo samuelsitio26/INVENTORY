@@ -5,6 +5,8 @@
 	export let lateItems = [];
 	export let waitingApprovalItems = [];
 	export let spkNotifications = [];
+	export let productionRequests = [];
+	export let productionNotifications = [];
 
 	let open = false;
 	const dispatch = createEventDispatcher();
@@ -65,11 +67,11 @@
 				d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
 			/>
 		</svg>
-		{#if reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length > 0}
+		{#if reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length + productionRequests.length + productionNotifications.length > 0}
 			<span
 				class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold animate-pulse"
 			>
-				{reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length}
+				{reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length + productionRequests.length + productionNotifications.length}
 			</span>
 		{/if}
 	</button>
@@ -83,6 +85,12 @@
 						class:text-blue-600={tab === 'spk'}
 						class:border-b-blue-600={tab === 'spk'}
 						on:click={() => (tab = 'spk')}>SPK Approval</button
+					>
+					<button
+						class="flex-1 py-3 text-sm font-bold border-b-2"
+						class:text-blue-600={tab === 'production'}
+						class:border-b-blue-600={tab === 'production'}
+						on:click={() => (tab = 'production')}>Produksi</button
 					>
 					<button
 						class="flex-1 py-3 text-sm font-bold border-b-2"
@@ -132,7 +140,7 @@
 											Reject
 										</button>
 										<a 
-											href="/inventory/spk-notifications/{notification.spk_id}"
+											href="/inventory/spk-notifications/{notification.id}"
 											class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
 										>
 											Detail
@@ -140,6 +148,43 @@
 									</div>
 								</div>
 							{/each}
+						{/if}
+					{:else if tab === 'production'}
+						{#if productionNotifications.length === 0}
+							<div class="text-gray-400 text-sm text-center">Tidak ada finished goods yang perlu diproduksi</div>
+						{:else}
+							{#each productionNotifications.slice(0, 5) as item}
+								<div class="mb-3 p-3 rounded bg-orange-50 border border-orange-100">
+									<div class="font-semibold text-orange-700">{item.nama_barang}</div>
+									<div class="text-xs text-gray-600 mt-1">Kode: {item.kode_barang}</div>
+									<div class="text-xs text-gray-500 mt-1">
+										Sisa Stok: <span class="font-bold text-{item.priority === 'urgent' ? 'red' : item.priority === 'high' ? 'orange' : 'yellow'}-600">{item.sisa_stok}</span>
+									</div>
+									<div class="text-xs text-gray-500">
+										Priority: <span class="px-1 py-0.5 rounded text-white text-xs bg-{item.priority === 'urgent' ? 'red' : item.priority === 'high' ? 'orange' : 'yellow'}-500">
+											{item.priority === 'urgent' ? 'URGENT' : item.priority === 'high' ? 'HIGH' : 'MEDIUM'}
+										</span>
+									</div>
+									<div class="flex space-x-2 mt-2">
+										<a 
+											href="/inventory/produksi-notifications"
+											class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+										>
+											Lihat Detail
+										</a>
+									</div>
+								</div>
+							{/each}
+							{#if productionNotifications.length > 5}
+								<div class="text-center mt-2">
+									<a 
+										href="/inventory/produksi-notifications"
+										class="text-xs text-blue-600 hover:text-blue-800"
+									>
+										Lihat semua ({productionNotifications.length}) notifications
+									</a>
+								</div>
+							{/if}
 						{/if}
 					{:else if tab === 'late'}
 						{#if lateItems.length === 0}

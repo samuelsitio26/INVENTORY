@@ -5,6 +5,7 @@
 	import { searchTerm } from '$lib/stores/search.js';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
 	import { getSPKNotifications, approveSPKNotification, rejectSPKNotification } from '$lib/services/notifications.js';
+	import { productionRequests } from '$lib/stores/notifications.js';
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -13,6 +14,7 @@
 		{ path: '/inventory/finishedgood', label: 'Finish Good', icon: '🏷️' },
 		{ path: '/inventory/rawmaterial', label: 'Raw Material', icon: '🧱' },
 		{ path: '/inventory/spk-notifications', label: 'SPK Notifications', icon: '🔔' },
+		{ path: '/inventory/produksi-notifications', label: 'Produksi Notifications', icon: '🏭' },
 	];
 
 	// State for user
@@ -25,6 +27,9 @@
 	let waitingApprovalItems = [];
 	let spkNotifications = [];
 	let rentalData = [];
+	let productionRequestsData = [];
+	let finishedGoodsData = [];
+	let productionNotifications = [];
 
 	onMount(() => {
 		if (typeof window !== 'undefined') {
@@ -39,6 +44,15 @@
 				window.location.href = '/login';
 			}
 		}
+
+		// Subscribe to production requests
+		const unsubscribe = productionRequests.subscribe(value => {
+			productionRequestsData = value;
+		});
+		
+		return () => {
+			unsubscribe();
+		};
 	});
 
 	function logout() {
@@ -203,11 +217,61 @@
 		}
 	}
 
+	// Fetch finished goods data for production notifications
+	async function fetchFinishedGoods() {
+		try {
+			const response = await fetch('https://directus.eltamaprimaindo.com/items/finishgood', {
+				headers: {
+					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+				}
+			});
+			
+			if (!response.ok) return [];
+			
+			const data = await response.json();
+			return data.data.map(item => ({
+				...item,
+				status: calculateStatus(item.sisa_stok || 0)
+			}));
+		} catch (err) {
+			console.error('Fetch Finished Goods Error:', err);
+			return [];
+		}
+	}
+
+	function calculateStatus(stock) {
+		if (stock === 0) return 'Out of Stock';
+		if (stock < 10) return 'Low Stock';
+		return 'Ready';
+	}
+
+	// Get production notifications (items that need restocking)
+	function getProductionNotifications(finishedGoods) {
+		return finishedGoods
+			.filter(item => item.sisa_stok <= 10) // Items with stock <= 10
+			.sort((a, b) => a.sisa_stok - b.sisa_stok) // Sort by stock level, lowest first
+			.map(item => ({
+				id: item.id,
+				kode_barang: item.kode_barang,
+				nama_barang: item.nama_barang,
+				sisa_stok: item.sisa_stok,
+				status: item.status,
+				warna: item.warna,
+				kemasan: item.kemasan,
+				priority: item.sisa_stok === 0 ? 'urgent' : item.sisa_stok <= 5 ? 'high' : 'medium',
+				created_at: new Date().toISOString()
+			}));
+	}
+
 	onMount(async () => {
 		rentalData = await fetchRentalData();
 		reminders = getReminders(rentalData);
 		lateItems = getLateItems(rentalData);
 		waitingApprovalItems = getWaitingApprovalItems(rentalData);
+		
+		// Load finished goods and production notifications
+		finishedGoodsData = await fetchFinishedGoods();
+		productionNotifications = getProductionNotifications(finishedGoodsData);
 		
 		// Load SPK notifications
 		try {
@@ -515,6 +579,8 @@
 							{lateItems} 
 							{waitingApprovalItems} 
 							{spkNotifications}
+							{productionNotifications}
+							productionRequests={productionRequestsData}
 							on:spkAction={handleSPKAction} 
 						/>
 					</div>
