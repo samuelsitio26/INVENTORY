@@ -7,7 +7,6 @@
 	import { getSPKNotifications, approveSPKNotification, rejectSPKNotification } from '$lib/services/notifications.js';
 	import { productionRequests } from '$lib/stores/notifications.js';
 
-
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
 		{ path: '/inventory', label: 'Inventory', icon: '📦' },
@@ -16,7 +15,6 @@
 		{ path: '/inventory/rawmaterial', label: 'Raw Material', icon: '🧱' },
 		{ path: '/inventory/spk-notifications', label: 'SPK Notifications', icon: '🔔' },
 		{ path: '/inventory/produksi-notifications', label: 'Produksi Notifications', icon: '🏭' },
-
 	];
 
 	// State for user
@@ -28,11 +26,15 @@
 	let lateItems = [];
 	let waitingApprovalItems = [];
 	let spkNotifications = [];
-	let soCustomerData = [];
 	let rentalData = [];
 	let productionRequestsData = [];
 	let finishedGoodsData = [];
 	let productionNotifications = [];
+	let manualProductionRequests = []; // For NotificationBell only
+
+	// Toast notification state
+	let toastNotifications = [];
+	let toastId = 0;
 
 	onMount(() => {
 		if (typeof window !== 'undefined') {
@@ -53,8 +55,17 @@
 			productionRequestsData = value;
 		});
 		
+		// Load production requests from localStorage
+		loadProductionRequests();
+		
+		// Listen for production request events
+		window.addEventListener('productionRequestAdded', handleProductionRequestAdded);
+		window.addEventListener('productionRequestDeleted', handleProductionRequestDeleted);
+		
 		return () => {
 			unsubscribe();
+			window.removeEventListener('productionRequestAdded', handleProductionRequestAdded);
+			window.removeEventListener('productionRequestDeleted', handleProductionRequestDeleted);
 		};
 	});
 
@@ -250,8 +261,14 @@
 
 	// Get production notifications (items that need restocking)
 	function getProductionNotifications(finishedGoods) {
+		const dismissedItems = typeof window !== 'undefined' 
+			? JSON.parse(localStorage.getItem('dismissedAutoNotifications') || '[]')
+			: [];
+		const dismissedKodeBaran = dismissedItems.map(item => item.kode_barang);
+		
 		return finishedGoods
 			.filter(item => item.sisa_stok <= 10) // Items with stock <= 10
+			.filter(item => !dismissedKodeBaran.includes(item.kode_barang)) // Exclude dismissed items
 			.sort((a, b) => a.sisa_stok - b.sisa_stok) // Sort by stock level, lowest first
 			.map(item => ({
 				id: item.id,
@@ -266,6 +283,175 @@
 			}));
 	}
 
+	// Load production requests from localStorage
+	function loadProductionRequests() {
+		if (typeof window !== 'undefined') {
+			const requests = JSON.parse(localStorage.getItem('productionRequests') || '[]');
+			productionNotifications = [...productionNotifications, ...requests];
+		}
+	}
+
+	// Handle new production request event
+	async function handleProductionRequestAdded(event) {
+		const newRequest = event.detail;
+		
+		// Reload production notifications to include the new request
+		productionNotifications = getCombinedProductionNotifications();
+		manualProductionRequests = await getManualProductionRequests();
+		
+		// Show toast notification
+		showToastNotification({
+			title: 'Permintaan Produksi Baru',
+			message: `${newRequest.nama_barang} telah diajukan untuk produksi`,
+			type: 'info',
+			icon: '🏭'
+		});
+		
+		console.log('Production request added to notifications:', newRequest);
+		console.log('Total production notifications:', productionNotifications.length);
+		console.log('Manual production requests:', manualProductionRequests.length);
+	}
+
+	// Handle deleted production request event
+	function handleProductionRequestDeleted(event) {
+		const deletedRequest = event.detail;
+		
+		// Reload production notifications to reflect the deletion
+		productionNotifications = getCombinedProductionNotifications();
+		manualProductionRequests = getManualProductionRequests();
+		
+		const actionText = deletedRequest.source === 'manual' ? 'dihapus' : 'disembunyikan';
+		showToastNotification({
+			title: 'Produksi Notification ' + (deletedRequest.source === 'manual' ? 'Dihapus' : 'Disembunyikan'),
+			message: `${deletedRequest.nama_barang} telah ${actionText}`,
+			type: 'info',
+			icon: '🗑️'
+		});
+		
+		console.log('Production request deleted/dismissed:', deletedRequest);
+		console.log('Updated production notifications:', productionNotifications.length);
+		console.log('Updated manual production requests:', manualProductionRequests.length);
+	}
+
+	// Function to show toast notification
+	function showToastNotification({ title, message, type = 'info', icon = '🔔', duration = 5000 }) {
+		const notification = {
+			id: ++toastId,
+			title,
+			message,
+			type,
+			icon,
+			timestamp: new Date().toLocaleTimeString('id-ID', { 
+				hour: '2-digit', 
+				minute: '2-digit' 
+			})
+		};
+		
+		toastNotifications = [...toastNotifications, notification];
+		
+		// Auto remove after duration
+		setTimeout(() => {
+			removeToastNotification(notification.id);
+		}, duration);
+	}
+
+	// Function to remove toast notification
+	function removeToastNotification(id) {
+		toastNotifications = toastNotifications.filter(notification => notification.id !== id);
+	}
+
+	// Function to get notification color classes
+	function getToastColor(type) {
+		switch (type) {
+			case 'success': return 'bg-green-500 border-green-600';
+			case 'error': return 'bg-red-500 border-red-600';
+			case 'warning': return 'bg-yellow-500 border-yellow-600';
+			case 'info': return 'bg-blue-500 border-blue-600';
+			default: return 'bg-gray-500 border-gray-600';
+		}
+	}
+
+	// Combine automatic and manual production notifications
+	function getCombinedProductionNotifications() {
+		// Get automatic notifications from finished goods
+		const autoNotifications = getProductionNotifications(finishedGoodsData);
+		
+		// Get manual requests from localStorage
+		const manualRequests = typeof window !== 'undefined' 
+			? JSON.parse(localStorage.getItem('productionRequests') || '[]')
+			: [];
+		
+		// Combine and deduplicate by kode_barang
+		const combined = [...autoNotifications];
+		manualRequests.forEach(request => {
+			const exists = combined.find(item => item.kode_barang === request.kode_barang);
+			if (!exists) {
+				combined.push({
+					...request,
+					id: request.id || Date.now(),
+					created_at: request.tanggal_request || new Date().toISOString()
+				});
+			}
+		});
+		
+		return combined.sort((a, b) => {
+			// Sort by priority: urgent > high > medium
+			const priorityOrder = { urgent: 3, high: 2, medium: 1 };
+			if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+				return priorityOrder[b.priority] - priorityOrder[a.priority];
+			}
+			// Then by stock level (lowest first)
+			return a.sisa_stok - b.sisa_stok;
+		});
+	}
+
+	// Get manual production requests for NotificationBell (only manually requested items)
+	async function getManualProductionRequests() {
+		try {
+			// Try to fetch from Directus database first
+			const response = await fetch('https://directus.eltamaprimaindo.com/items/produksi_notifications', {
+				headers: {
+					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+				}
+			});
+
+			if (response.ok) {
+				const data = await response.json();
+				return data.data
+					.filter(request => request.status !== 'completed') // Only show pending requests
+					.map(request => ({
+						...request,
+						source: 'manual',
+						created_at: request.tanggal_request || new Date().toISOString()
+					}))
+					.sort((a, b) => {
+						// Sort by timestamp, newest first
+						return new Date(b.created_at) - new Date(a.created_at);
+					});
+			} else {
+				console.warn('Failed to fetch from database, using localStorage fallback');
+			}
+		} catch (error) {
+			console.error('Error fetching production requests from database:', error);
+		}
+
+		// Fallback to localStorage if database fails
+		const manualRequests = typeof window !== 'undefined' 
+			? JSON.parse(localStorage.getItem('productionRequests') || '[]')
+			: [];
+		
+		return manualRequests
+			.map(request => ({
+				...request,
+				source: 'manual',
+				created_at: request.tanggal_request || new Date().toISOString()
+			}))
+			.sort((a, b) => {
+				// Sort by timestamp, newest first
+				return new Date(b.created_at) - new Date(a.created_at);
+			});
+	}
+
 	onMount(async () => {
 		rentalData = await fetchRentalData();
 		reminders = getReminders(rentalData);
@@ -274,9 +460,9 @@
 		
 		// Load finished goods and production notifications
 		finishedGoodsData = await fetchFinishedGoods();
-		productionNotifications = getProductionNotifications(finishedGoodsData);
+		productionNotifications = getCombinedProductionNotifications();
+		manualProductionRequests = await getManualProductionRequests();
 		
-
 		// Load SPK notifications
 		try {
 			spkNotifications = await getSPKNotifications();
@@ -285,40 +471,91 @@
 			console.error('Error loading SPK notifications in layout:', error);
 			spkNotifications = [];
 		}
-
-		// Load SO Customer data
-		try {
-			soCustomerData = await getRecentSOCustomer();
-			console.log('SO Customer data loaded in layout:', soCustomerData.length);
-		} catch (error) {
-			console.error('Error loading SO Customer data in layout:', error);
-			soCustomerData = [];
-		}
 	});
 
 	// Handle SPK actions from NotificationBell
 	async function handleSPKAction(event) {
 		const { notificationId, spkId, action } = event.detail;
-
+		
 		try {
 			if (action === 'approve') {
 				await approveSPKNotification(spkId);
+				showToastNotification({
+					title: 'SPK Disetujui',
+					message: `SPK #${spkId} berhasil disetujui`,
+					type: 'success',
+					icon: '✅'
+				});
 				console.log('SPK approved:', spkId);
 			} else if (action === 'reject') {
 				await rejectSPKNotification(spkId);
+				showToastNotification({
+					title: 'SPK Ditolak',
+					message: `SPK #${spkId} telah ditolak`,
+					type: 'error',
+					icon: '❌'
+				});
 				console.log('SPK rejected:', spkId);
 			}
-
+			
 			// Reload SPK notifications after action
 			spkNotifications = await getSPKNotifications();
 		} catch (error) {
 			console.error('Error handling SPK action:', error);
+			showToastNotification({
+				title: 'Error',
+				message: 'Terjadi kesalahan saat memproses SPK',
+				type: 'error',
+				icon: '⚠️'
+			});
 		}
 	}
 </script>
 
 {#if $page.url.pathname !== '/login'}
 	<div class="min-h-screen bg-gray-50">
+		<!-- Toast Notifications -->
+		<div class="fixed top-4 right-4 z-50 space-y-2">
+			{#each toastNotifications as notification (notification.id)}
+				<div 
+					class="max-w-sm w-full {getToastColor(notification.type)} shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden transform transition-all duration-300 ease-in-out animate-slide-in"
+				>
+					<div class="p-4">
+						<div class="flex items-start">
+							<div class="flex-shrink-0">
+								<span class="text-2xl">{notification.icon}</span>
+							</div>
+							<div class="ml-3 w-0 flex-1 pt-0.5">
+								<p class="text-sm font-medium text-white">
+									{notification.title}
+								</p>
+								<p class="mt-1 text-sm text-white/90">
+									{notification.message}
+								</p>
+								<p class="mt-1 text-xs text-white/70">
+									{notification.timestamp}
+								</p>
+							</div>
+							<div class="ml-4 flex-shrink-0 flex">
+								<button
+									class="bg-white/20 rounded-md inline-flex text-white/80 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+									on:click={() => removeToastNotification(notification.id)}
+								>
+									<span class="sr-only">Close</span>
+									<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+										<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+									</svg>
+								</button>
+							</div>
+						</div>
+					</div>
+					<!-- Progress bar -->
+					<div class="bg-black/20 h-1">
+						<div class="bg-white/40 h-full animate-progress-bar"></div>
+					</div>
+				</div>
+			{/each}
+		</div>
 		<!-- Header -->
 		<header
 			class="relative bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 shadow-2xl border-b border-white/10"
@@ -349,12 +586,8 @@
 									class="absolute inset-0 bg-white/10 rounded-2xl animate-pulse duration-2000"
 								></div>
 								<!-- <span class="relative text-3xl filter drop-shadow-lg"><img src="/Logo-Eltama-Prima-Indo-01.png" alt="Logo" class="w-16 h-16 mb-2 drop-shadow-lg" /></span>  rapihkan logo -->
-								<span class="relative text-3xl font-bold text-white">
-									<img
-										src="/Logo-Eltama-Prima-Indo-01.png"
-										alt="Logo"
-										class="w-16 h-16 drop-shadow-lg"
-									/>
+								<span class="relative text-3xl font-bold text-white"> 
+									<img src="/Logo-Eltama-Prima-Indo-01.png" alt="Logo" class="w-16 h-16 drop-shadow-lg" /> 
 								</span>
 							</div>
 						</div>
@@ -385,7 +618,7 @@
 								></div>
 								<span class="text-green-300 text-sm font-medium">System Online</span>
 							</div>
-						</div> 
+						</div>
 
 						<!-- Current Date & Time -->
 						<div
@@ -544,62 +777,15 @@
 
 					<!-- Right Side - Quick Actions -->
 					<div class="flex items-center space-x-4">
-						<!-- Quick Search -->
-						<div class="hidden md:flex flex-col justify-center w-72">
-							<label class="sr-only">Pencarian Barang</label>
-							<div class="relative">
-								<input
-									type="text"
-									placeholder="Cari di semua tabel: nama barang, kategori, departemen, status, deskripsi..."
-									class="w-full p-2 pl-10 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm shadow-sm"
-									bind:value={$searchTerm}
-								/>
-								<!-- Search Icon -->
-								<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-									<svg
-										class="h-5 w-5 text-gray-400"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-										/>
-									</svg>
-								</div>
-								<!-- Clear Button -->
-								{#if $searchTerm}
-									<button
-										on:click={clearSearch}
-										class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-										type="button"
-									>
-										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M6 18L18 6M6 6l12 12"
-											/>
-										</svg>
-									</button>
-								{/if}
-							</div>
-						</div>
-
 						<!-- Notification Bell -->
-						<NotificationBell
-							{reminders}
-							{lateItems}
-							{waitingApprovalItems}
+						<NotificationBell 
+							{reminders} 
+							{lateItems} 
+							{waitingApprovalItems} 
 							{spkNotifications}
-							{productionNotifications}
+							productionNotifications={manualProductionRequests}
 							productionRequests={productionRequestsData}
 							on:spkAction={handleSPKAction} 
-
 						/>
 					</div>
 				</div>
@@ -619,3 +805,48 @@
 {:else}
 	<slot />
 {/if}
+
+<style>
+	.animate-fade-in {
+		animation: fadeIn 0.3s ease-out;
+	}
+
+	.animate-slide-in {
+		animation: slideIn 0.3s ease-out;
+	}
+
+	.animate-progress-bar {
+		animation: progressBar 5s linear;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: translateY(-10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@keyframes slideIn {
+		from {
+			opacity: 0;
+			transform: translateX(100%);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(0);
+		}
+	}
+
+	@keyframes progressBar {
+		from {
+			width: 100%;
+		}
+		to {
+			width: 0%;
+		}
+	}
+</style>

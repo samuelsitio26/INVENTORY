@@ -22,36 +22,89 @@
 
 	onMount(() => {
 		loadProductionNotifications();
+		
+		// Listen for new production requests
+		const handleNewRequest = () => {
+			loadProductionNotifications();
+		};
+		
+		// Listen for deleted production requests
+		const handleDeletedRequest = () => {
+			loadProductionNotifications();
+		};
+		
+		window.addEventListener('productionRequestAdded', handleNewRequest);
+		window.addEventListener('productionRequestDeleted', handleDeletedRequest);
+		
+		return () => {
+			window.removeEventListener('productionRequestAdded', handleNewRequest);
+			window.removeEventListener('productionRequestDeleted', handleDeletedRequest);
+		};
 	});
 
 	async function loadProductionNotifications() {
 		loading = true;
 		try {
-			const response = await fetch('https://directus.eltamaprimaindo.com/items/finishgood', {
+			// Load production requests from Directus database only
+			const productionRequestsResponse = await fetch('https://directus.eltamaprimaindo.com/items/produksi_notifications', {
 				headers: {
 					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
 				}
 			});
-			
-			if (!response.ok) {
-				throw new Error('Failed to fetch finished goods');
+
+			let allRequests = [];
+			if (productionRequestsResponse.ok) {
+				const productionRequestsData = await productionRequestsResponse.json();
+				console.log('Raw data from Directus:', productionRequestsData.data);
+				
+				allRequests = productionRequestsData.data
+					.filter(request => {
+						// Only show requests that are NOT done/completed
+						const isNotCompleted = request.status !== 'completed' && 
+											  request.status !== 'produced' && 
+											  request.status !== 'done';
+						
+						console.log('Filtering request:', request.kode_barang, 'status:', request.status, 'show:', isNotCompleted);
+						
+						return isNotCompleted;
+					})
+					.map(request => ({
+						...request,
+						// Map Directus field names to system field names
+						tanggal_notifikasi: request.tgl_notifikasi ? 
+							new Date(request.tgl_notifikasi).toLocaleDateString('id-ID') : 
+							new Date().toLocaleDateString('id-ID'),
+						source: 'manual', // Keep for UI display purposes
+						// Ensure sisa_stok is a number
+						sisa_stok: parseInt(request.sisa_stok) || 0,
+						// Calculate priority based on stock level
+						priority: (() => {
+							const stock = parseInt(request.sisa_stok) || 0;
+							if (stock === 0) return 'urgent';
+							if (stock <= 5) return 'high';
+							return 'medium';
+						})()
+					}));
+				
+				console.log('Filtered requests:', allRequests);
+				console.log('Total requests after filter:', allRequests.length);
+			} else {
+				console.warn('Failed to fetch production requests from database');
+				allRequests = [];
 			}
 			
-			const data = await response.json();
-			const finishedGoods = data.data.map(item => ({
-				...item,
-				status: calculateStatus(item.sisa_stok || 0)
-			}));
+			productionNotifications = allRequests.sort((a, b) => {
+				// Sort by priority: urgent > high > medium
+				const priorityOrder = { urgent: 3, high: 2, medium: 1 };
+				if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+					return priorityOrder[b.priority] - priorityOrder[a.priority];
+				}
+				// Then by stock level (lowest first) - ensure we compare numbers
+				return (parseInt(a.sisa_stok) || 0) - (parseInt(b.sisa_stok) || 0);
+			});
 			
-			// Filter items yang perlu diproduksi (stok <= 10)
-			productionNotifications = finishedGoods
-				.filter(item => item.sisa_stok <= 10)
-				.sort((a, b) => a.sisa_stok - b.sisa_stok)
-				.map(item => ({
-					...item,
-					priority: item.sisa_stok === 0 ? 'urgent' : item.sisa_stok <= 5 ? 'high' : 'medium',
-					tanggal_notifikasi: new Date().toLocaleDateString('id-ID')
-				}));
+			console.log('Final productionNotifications:', productionNotifications);
+			console.log('Total notifications to display:', productionNotifications.length);
 			
 			filteredNotifications = productionNotifications;
 			totalItems = productionNotifications.length;
@@ -65,8 +118,9 @@
 	}
 
 	function calculateStatus(stock) {
-		if (stock === 0) return 'Out of Stock';
-		if (stock < 10) return 'Low Stock';
+		const stockNumber = parseInt(stock) || 0;
+		if (stockNumber === 0) return 'Out of Stock';
+		if (stockNumber < 10) return 'Low Stock';
 		return 'Ready';
 	}
 
@@ -130,13 +184,142 @@
 		updatePaginatedItems();
 	}
 
-	function markAsProduced(item) {
-		toast = {
-			show: true,
-			message: `${item.nama_barang} telah ditandai sebagai diproduksi. Silakan update stok di halaman Finished Goods.`,
-			type: 'success'
-		};
+	async function markAsProduced(item) {
+		try {
+			if (item.id) {
+				// Update status to 'done' in Directus database
+				const response = await fetch(`https://directus.eltamaprimaindo.com/items/produksi_notifications/${item.id}`, {
+					method: 'PATCH',
+					headers: {
+						'Content-Type': 'application/json',
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+					},
+					body: JSON.stringify({
+						status: 'done'
+					})
+				});
+
+				if (!response.ok) {
+					throw new Error('Failed to update status in database');
+				}
+
+				console.log('Production request marked as done in database:', item.id);
+				console.log('Updated item status to: done');
+				
+				// Remove from current display since it's now completed
+				productionNotifications = productionNotifications.filter(notification => 
+					notification.id !== item.id
+				);
+				
+				// Update filtered notifications and pagination
+				filteredNotifications = filteredNotifications.filter(notification => 
+					notification.id !== item.id
+				);
+				
+				totalItems = filteredNotifications.length;
+				
+				// Adjust current page if necessary
+				const maxPage = Math.ceil(totalItems / itemsPerPage) || 1;
+				if (currentPage > maxPage) {
+					currentPage = maxPage;
+				}
+				
+				updatePaginatedItems();
+
+				// Trigger event to update layout notifications
+				window.dispatchEvent(new CustomEvent('productionRequestDeleted', {
+					detail: item
+				}));
+
+				toast = {
+					show: true,
+					message: `${item.nama_barang} telah ditandai sebagai diproduksi dan statusnya diupdate di database.`,
+					type: 'success'
+				};
+			} else {
+				toast = {
+					show: true,
+					message: `Item tidak memiliki ID database yang valid.`,
+					type: 'error'
+				};
+			}
+		} catch (error) {
+			console.error('Error marking item as produced:', error);
+			toast = {
+				show: true,
+				message: 'Error mengupdate status produksi: ' + error.message,
+				type: 'error'
+			};
+		}
+		
 		setTimeout(() => toast.show = false, 5000);
+	}
+
+	async function deleteProductionRequest(item) {
+		try {
+			if (item.id) {
+				// Delete request from Directus database
+				const response = await fetch(`https://directus.eltamaprimaindo.com/items/produksi_notifications/${item.id}`, {
+					method: 'DELETE',
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+					}
+				});
+
+				if (!response.ok) {
+					throw new Error('Failed to delete from database');
+				}
+				console.log('Production request deleted from database:', item.id);
+			}
+			
+			// Trigger event to update layout notifications
+			window.dispatchEvent(new CustomEvent('productionRequestDeleted', {
+				detail: item
+			}));
+			
+			// Remove from current display
+			productionNotifications = productionNotifications.filter(notification => 
+				notification.id !== item.id
+			);
+			
+			// Update filtered notifications and pagination
+			filteredNotifications = filteredNotifications.filter(notification => 
+				notification.id !== item.id
+			);
+			
+			totalItems = filteredNotifications.length;
+			
+			// Adjust current page if necessary
+			const maxPage = Math.ceil(totalItems / itemsPerPage) || 1;
+			if (currentPage > maxPage) {
+				currentPage = maxPage;
+			}
+			
+			updatePaginatedItems();
+			
+			toast = {
+				show: true,
+				message: `${item.nama_barang} telah dihapus dari database dan daftar produksi notifications.`,
+				type: 'success'
+			};
+			
+			setTimeout(() => toast.show = false, 5000);
+
+		} catch (error) {
+			console.error('Error deleting production request:', error);
+			toast = {
+				show: true,
+				message: 'Error menghapus permintaan produksi: ' + error.message,
+				type: 'error'
+			};
+			setTimeout(() => toast.show = false, 5000);
+		}
+	}
+
+	function confirmDelete(item) {
+		if (confirm(`Apakah Anda yakin ingin menghapus permintaan produksi untuk "${item.nama_barang}"?`)) {
+			deleteProductionRequest(item);
+		}
 	}
 
 	// Reactive statements
@@ -265,13 +448,15 @@
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kemasan</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sisa Stok</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DB Status</th>
+							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal Notifikasi</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
 						</tr>
 					</thead>
 					<tbody class="bg-white divide-y divide-gray-200">
 						{#each paginatedItems as item}
-							<tr class="hover:bg-gray-50 {item.priority === 'urgent' ? 'bg-red-50' : item.priority === 'high' ? 'bg-orange-50' : 'bg-yellow-50'}">
+							<tr class="hover:bg-gray-50 {item.priority === 'urgent' ? 'bg-red-50' : item.priority === 'high' ? 'bg-orange-50' : 'bg-yellow-50'} ring-2 ring-purple-300">
 								<td class="px-4 py-4 whitespace-nowrap">
 									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white {getPriorityColor(item.priority)}">
 										{getPriorityText(item.priority)}
@@ -287,21 +472,45 @@
 								</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.kemasan || '-'}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-									<span class="font-bold {item.sisa_stok === 0 ? 'text-red-600' : item.sisa_stok <= 5 ? 'text-orange-600' : 'text-yellow-600'}">
-										{item.sisa_stok}
+									<span class="font-bold {parseInt(item.sisa_stok) === 0 ? 'text-red-600' : parseInt(item.sisa_stok) <= 5 ? 'text-orange-600' : 'text-yellow-600'}">
+										{parseInt(item.sisa_stok) || 0}
 									</span>
 								</td>
 								<td class="px-4 py-4 whitespace-nowrap">
-									<StatusBadge status={item.status} />
+									<StatusBadge status={calculateStatus(item.sisa_stok)} />
+								</td>
+								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+									<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {
+										item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+										item.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+										item.status === 'done' ? 'bg-green-100 text-green-800' :
+										item.status === 'produced' ? 'bg-purple-100 text-purple-800' :
+										'bg-gray-100 text-gray-800'
+									}">
+										{item.status || 'pending'}
+									</span>
+								</td>
+								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+									<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+										🚨 Requested
+									</span>
 								</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.tanggal_notifikasi}</td>
 								<td class="px-4 py-4 whitespace-nowrap">
-									<button
-										class="px-3 py-1 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 text-sm"
-										on:click={() => markAsProduced(item)}
-									>
-										Tandai Diproduksi
-									</button>
+									<div class="flex gap-2">
+										<button
+											class="px-3 py-1 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 text-sm"
+											on:click={() => markAsProduced(item)}
+										>
+											Tandai Diproduksi
+										</button>
+										<button
+											class="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 text-sm"
+											on:click={() => confirmDelete(item)}
+										>
+											Hapus
+										</button>
+									</div>
 								</td>
 							</tr>
 						{/each}

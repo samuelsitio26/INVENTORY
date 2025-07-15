@@ -372,6 +372,81 @@
 		showProductionRequestModal = true;
 	}
 
+	// Function to handle production request submission
+	async function submitProductionRequest(item) {
+		try {
+			// Create production request notification data
+			const productionRequestData = {
+				nama_barang: item.nama_barang,
+				kode_barang: item.kode_barang,
+				sisa_stok: item.sisa_stok,
+				warna: item.warna || null,
+				kemasan: item.kemasan || null,
+				priority: item.sisa_stok === 0 ? 'urgent' : item.sisa_stok <= 5 ? 'high' : 'medium',
+				tanggal_request: new Date().toISOString(),
+				status: 'pending',
+				requested_by: 'User', // Could be dynamic based on logged in user
+				message: `Permintaan produksi untuk ${item.nama_barang} - Stok saat ini: ${item.sisa_stok}`,
+				source: 'manual',
+				finish_good_id: item.id
+			};
+
+			// Save to Directus database
+			const response = await fetch('https://directus.eltamaprimaindo.com/items/produksi_notifications', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+				},
+				body: JSON.stringify(productionRequestData)
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(`Failed to save production request: ${errorData.message || response.statusText}`);
+			}
+
+			const savedData = await response.json();
+			console.log('Production request saved to database:', savedData);
+
+			// Also save to localStorage for backward compatibility and immediate UI update
+			let existingRequests = JSON.parse(localStorage.getItem('productionRequests') || '[]');
+			
+			// Check if request already exists for this item
+			const existingIndex = existingRequests.findIndex(req => req.kode_barang === item.kode_barang);
+			if (existingIndex !== -1) {
+				// Update existing request
+				existingRequests[existingIndex] = { ...existingRequests[existingIndex], ...productionRequestData, id: savedData.data.id };
+			} else {
+				// Add new request
+				existingRequests.push({ ...productionRequestData, id: savedData.data.id });
+			}
+			
+			localStorage.setItem('productionRequests', JSON.stringify(existingRequests));
+
+			// Trigger a custom event to notify layout about new production request
+			window.dispatchEvent(new CustomEvent('productionRequestAdded', {
+				detail: { ...productionRequestData, id: savedData.data.id }
+			}));
+
+			toast = {
+				show: true,
+				message: `Permintaan produksi untuk "${item.nama_barang}" berhasil diajukan dan tersimpan ke database! Silakan cek Produksi Notifications untuk melihat status.`,
+				type: 'success'
+			};
+			setTimeout(() => toast.show = false, 5000);
+
+		} catch (error) {
+			console.error('Error submitting production request:', error);
+			toast = {
+				show: true,
+				message: 'Error mengajukan permintaan produksi: ' + error.message,
+				type: 'error'
+			};
+			setTimeout(() => toast.show = false, 5000);
+		}
+	}
+
 	// Reactive statements
 	$: {
 		if (searchTerm !== undefined || statusFilter !== undefined) {
@@ -1999,7 +2074,7 @@
 									</button>
 									<button
 										class="px-2 py-1 bg-purple-500 text-white rounded-md hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-400 ml-2"
-										on:click={() => showProductionRequestNotification(item)}
+										on:click={() => submitProductionRequest(item)}
 									>
 										Ajukan Produksi
 									</button>
