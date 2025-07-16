@@ -9,11 +9,11 @@ const BASE_URL = 'https://directus.eltamaprimaindo.com';
 export async function fetchSOCustomer() {
 	try {
 		console.log('Fetching SO Customer data from:', `${BASE_URL}/items/so_customer`);
-		
+
 		const response = await fetch(`${BASE_URL}/items/so_customer`, {
 			method: 'GET',
 			headers: {
-				'Content-Type': 'application/json',
+				'Content-Type': 'application/json'
 			}
 		});
 
@@ -25,8 +25,8 @@ export async function fetchSOCustomer() {
 
 		const result = await response.json();
 		console.log('SO Customer API result:', result);
-		
-		return result.data || []; 
+
+		return result.data || [];
 	} catch (error) {
 		console.error('Error fetching SO Customer data:', error);
 		return [];
@@ -94,7 +94,7 @@ export async function getRecentSOCustomer() {
 	try {
 		const data = await fetchSOCustomer();
 		console.log('Raw SO Customer data received:', data.length, 'items');
-		
+
 		const thirtyDaysAgo = new Date();
 		thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -119,11 +119,11 @@ export async function getAllSOCustomer() {
 		console.log('Getting all SO Customer data...');
 		const data = await fetchSOCustomer();
 		console.log('All SO Customer data received:', data.length, 'items');
-		
+
 		// Sort by tanggal_so (newest first)
 		const sorted = data.sort((a, b) => new Date(b.tanggal_so) - new Date(a.tanggal_so));
 		console.log('Sorted SO Customer data:', sorted.length, 'items');
-		
+
 		return sorted;
 	} catch (error) {
 		console.error('Error getting all SO Customer:', error);
