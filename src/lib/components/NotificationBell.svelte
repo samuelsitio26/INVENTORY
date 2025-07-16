@@ -14,58 +14,50 @@
 	let bellRef;
 	let modalRef;
 	let tab = 'late';
-	let hasSetInitialTab = false;
+	let hasOpenedBefore = false; // Track if bell has been opened before
 
 	function toggle() {
-		// Set initial tab when opening for the first time
-		if (!open && !hasSetInitialTab) {
-			if (productionNotifications.length > 0) {
-				tab = 'production';
-			} else if (spkNotifications.length > 0) {
-				tab = 'spk';
-			} else if (lateItems.length > 0) {
-				tab = 'late';
-			} else if (waitingApprovalItems.length > 0) {
-				tab = 'approval';
-			} else if (reminders.length > 0) {
-				tab = 'reminder';
-			} else if (soCustomerData.length > 0) {
-				tab = 'so';
-			}
-			hasSetInitialTab = true;
-		}
+		// No longer doing auto-tab switching here since we handle it in reactive statement
 		open = !open;
 	}
 
-	// Reactive statement for debugging and auto-tab switching
+	// Handle auto-switching tab only when bell is first opened
+	$: if (open && !hasOpenedBefore) {
+		// Mark that bell has been opened
+		hasOpenedBefore = true;
+
+		// Auto-switch to first tab that has notifications
+		if (productionNotifications.length > 0) {
+			setTab('production');
+		} else if (spkNotifications.length > 0) {
+			setTab('spk');
+		} else if (lateItems.length > 0) {
+			setTab('late');
+		} else if (waitingApprovalItems.length > 0) {
+			setTab('approval');
+		} else if (reminders.length > 0) {
+			setTab('reminder');
+		} else if (soCustomerData.length > 0) {
+			setTab('so');
+		}
+		console.log('Auto-switched tab on first open to:', tab);
+	}
+
+	// Debug reactive statement - track changes
 	$: {
-		console.log('NotificationBell - Production notifications:', productionNotifications);
+		console.log('NotificationBell DEBUG - Current tab:', tab);
+		console.log('NotificationBell DEBUG - Bell open:', open);
 		console.log(
-			'NotificationBell - Production notifications length:',
+			'NotificationBell DEBUG - Production notifications:',
 			productionNotifications.length
 		);
-		console.log('NotificationBell - SO Customer data:', soCustomerData);
-		console.log('NotificationBell - SO Customer data length:', soCustomerData.length);
+		console.log('NotificationBell DEBUG - SPK notifications:', spkNotifications.length);
+		console.log('NotificationBell DEBUG - SO Customer data:', soCustomerData.length);
+		console.log('NotificationBell DEBUG - Has opened before:', hasOpenedBefore);
 
 		// Log when production notifications become empty
 		if (productionNotifications.length === 0) {
 			console.log('🎉 All production requests completed! Notifications cleared.');
-
-			// Auto-switch tab if currently on production tab and no more production notifications
-			if (tab === 'production' && open) {
-				if (spkNotifications.length > 0) {
-					tab = 'spk';
-				} else if (lateItems.length > 0) {
-					tab = 'late';
-				} else if (waitingApprovalItems.length > 0) {
-					tab = 'approval';
-				} else if (reminders.length > 0) {
-					tab = 'reminder';
-				} else if (soCustomerData.length > 0) {
-					tab = 'so';
-				}
-				console.log('Auto-switched tab to:', tab);
-			}
 		}
 	}
 
@@ -79,6 +71,13 @@
 		if (open && event.key === 'Escape') {
 			open = false;
 		}
+	}
+
+	function setTab(newTab) {
+		console.log('Setting tab to:', newTab);
+		console.log('Current tab:', tab);
+		tab = newTab;
+		console.log('Tab after setting:', tab);
 	}
 
 	function handleSPKAction(notificationId, spkId, action) {
@@ -140,31 +139,31 @@
 						class="flex-1 py-3 text-sm font-bold border-b-2"
 						class:text-blue-600={tab === 'spk'}
 						class:border-b-blue-600={tab === 'spk'}
-						on:click={() => (tab = 'spk')}>SPK Approval</button
+						on:click={() => setTab('spk')}>SPK Approval</button
 					>
 					<button
 						class="flex-1 py-3 text-sm font-bold border-b-2"
 						class:text-blue-600={tab === 'production'}
 						class:border-b-blue-600={tab === 'production'}
-						on:click={() => (tab = 'production')}>Produksi</button
+						on:click={() => setTab('production')}>Produksi</button
 					>
 					<button
 						class="flex-1 py-3 text-sm font-bold border-b-2"
 						class:text-blue-600={tab === 'late'}
 						class:border-b-blue-600={tab === 'late'}
-						on:click={() => (tab = 'late')}>Terlambat</button
+						on:click={() => setTab('late')}>Terlambat</button
 					>
 					<button
 						class="flex-1 py-3 text-sm font-bold border-b-2"
 						class:text-blue-600={tab === 'approval'}
 						class:border-b-blue-600={tab === 'approval'}
-						on:click={() => (tab = 'approval')}>Rental Approval</button
+						on:click={() => setTab('approval')}>Rental Approval</button
 					>
 					<button
 						class="flex-1 py-3 text-sm font-bold border-b-2"
 						class:text-blue-600={tab === 'so'}
 						class:border-b-blue-600={tab === 'so'}
-						on:click={() => (tab = 'so')}>SO Customer</button
+						on:click={() => setTab('so')}>SO Customer</button
 					>
 				</div>
 				<div class="p-4 max-h-80 overflow-y-auto">
