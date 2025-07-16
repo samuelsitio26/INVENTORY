@@ -10,7 +10,7 @@
 		rejectSPKNotification
 	} from '$lib/services/notifications.js';
 	import { productionRequests } from '$lib/stores/notifications.js';
-	import { getRecentSOCustomer } from '$lib/services/socustomer.js';
+	import { getRecentSOCustomer, getAllSOCustomer } from '$lib/services/socustomer.js';
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -493,7 +493,7 @@
 
 		// Load SO Customer data
 		try {
-			soCustomerData = await getRecentSOCustomer();
+			soCustomerData = await getAllSOCustomer();
 			console.log('SO Customer data loaded in layout:', soCustomerData.length);
 		} catch (error) {
 			console.error('Error loading SO Customer data in layout:', error);

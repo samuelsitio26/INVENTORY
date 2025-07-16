@@ -8,13 +8,24 @@ const BASE_URL = 'https://directus.eltamaprimaindo.com';
  */
 export async function fetchSOCustomer() {
 	try {
-		const response = await fetch(`${BASE_URL}/items/so_customer`);
+		console.log('Fetching SO Customer data from:', `${BASE_URL}/items/so_customer`);
+		
+		const response = await fetch(`${BASE_URL}/items/so_customer`, {
+			method: 'GET',
+			headers: {
+				'Content-Type': 'application/json',
+			}
+		});
+
+		console.log('SO Customer API response status:', response.status);
 
 		if (!response.ok) {
 			throw new Error(`HTTP error! status: ${response.status}`);
 		}
 
 		const result = await response.json();
+		console.log('SO Customer API result:', result);
+		
 		return result.data || []; 
 	} catch (error) {
 		console.error('Error fetching SO Customer data:', error);
@@ -81,18 +92,48 @@ export async function getPendingSOCustomer() {
  */
 export async function getRecentSOCustomer() {
 	try {
+		console.log('Getting recent SO Customer data...');
 		const data = await fetchSOCustomer();
+		console.log('Raw SO Customer data received:', data.length, 'items');
+		
 		const thirtyDaysAgo = new Date();
 		thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+		console.log('Filtering SO from date:', thirtyDaysAgo.toISOString());
 
-		return data
+		const filtered = data
 			.filter((so) => {
 				const soDate = new Date(so.tanggal_so);
-				return soDate >= thirtyDaysAgo;
+				const isRecent = soDate >= thirtyDaysAgo;
+				console.log(`SO ${so.nomor_so} date: ${so.tanggal_so}, is recent: ${isRecent}`);
+				return isRecent;
 			})
 			.sort((a, b) => new Date(b.tanggal_so) - new Date(a.tanggal_so));
+
+		console.log('Filtered recent SO Customer data:', filtered.length, 'items');
+		return filtered;
 	} catch (error) {
 		console.error('Error getting recent SO Customer:', error);
+		return [];
+	}
+}
+
+/**
+ * Get all SO Customer data (for testing purposes)
+ * @returns {Promise<Array>} All SO Customer data
+ */
+export async function getAllSOCustomer() {
+	try {
+		console.log('Getting all SO Customer data...');
+		const data = await fetchSOCustomer();
+		console.log('All SO Customer data received:', data.length, 'items');
+		
+		// Sort by tanggal_so (newest first)
+		const sorted = data.sort((a, b) => new Date(b.tanggal_so) - new Date(a.tanggal_so));
+		console.log('Sorted SO Customer data:', sorted.length, 'items');
+		
+		return sorted;
+	} catch (error) {
+		console.error('Error getting all SO Customer:', error);
 		return [];
 	}
 }

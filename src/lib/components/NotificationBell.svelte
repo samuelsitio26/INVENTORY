@@ -44,6 +44,8 @@
 			'NotificationBell - Production notifications length:',
 			productionNotifications.length
 		);
+		console.log('NotificationBell - SO Customer data:', soCustomerData);
+		console.log('NotificationBell - SO Customer data length:', soCustomerData.length);
 	}
 
 	function handleClickOutside(event) {
@@ -284,11 +286,19 @@
 								<div class="mb-3 p-3 rounded bg-indigo-50 border border-indigo-100">
 									<div class="font-semibold text-indigo-700">{so.nomor_so}</div>
 									<div class="text-xs text-gray-500">Customer: {so.company_name}</div>
-									<div class="text-xs text-gray-500">PO Customer: {so.nomor_po_customer}</div>
-									<div class="text-xs text-indigo-700">Tanggal SO: {so.tanggal_so}</div>
+									{#if so.nomor_po_customer}
+										<div class="text-xs text-gray-500">PO Customer: {so.nomor_po_customer}</div>
+									{/if}
 									<div class="text-xs text-indigo-700">
-										Tanggal Kirim: {so.tanggal_kirim || '-'}
+										Tanggal SO: {new Date(so.tanggal_so).toLocaleDateString('id-ID')}
 									</div>
+									{#if so.tanggal_kirim}
+										<div class="text-xs text-indigo-700">
+											Tanggal Kirim: {new Date(so.tanggal_kirim).toLocaleDateString('id-ID')}
+										</div>
+									{:else}
+										<div class="text-xs text-gray-500">Tanggal Kirim: Belum ditentukan</div>
+									{/if}
 									<div class="text-xs text-gray-600">Sales: {so.sales_name} ({so.sales_code})</div>
 									<div class="text-xs font-medium text-indigo-800">
 										Total: {new Intl.NumberFormat('id-ID', {
@@ -300,6 +310,9 @@
 										<div class="text-xs text-gray-500 mt-1">
 											Items: {so.details.length} produk
 										</div>
+									{/if}
+									{#if so.notes}
+										<div class="text-xs text-gray-500 mt-1 italic">Note: {so.notes}</div>
 									{/if}
 								</div>
 							{/each}
