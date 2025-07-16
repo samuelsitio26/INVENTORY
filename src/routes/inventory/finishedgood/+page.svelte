@@ -846,6 +846,10 @@
 	// Function to print Surat Jalan
 	function printSuratJalan(sjData) {
 		try {
+			console.log('printSuratJalan called with data:', sjData);
+			console.log('suratJalanList:', suratJalanList);
+			console.log('sjFormData:', sjFormData);
+			
 			const doc = new jsPDF();
 
 			// Set font
@@ -910,9 +914,30 @@
 			// Create table data - group items with same nomor_sj
 			let groupedItems = [];
 			
+			console.log('Preparing groupedItems...');
+			
 			// If printing from list, get items from suratJalanList
 			if (suratJalanList && suratJalanList.length > 0) {
-				groupedItems = suratJalanList.filter(item => item.nomor_sj === sjData.nomor_sj);
+				// Check if we have items in sjData.items or need to fetch them
+				if (sjData.items && Array.isArray(sjData.items)) {
+					groupedItems = sjData.items.map(item => ({
+						...item,
+						quantity: parseFloat(item.quantity) || 0
+					}));
+					console.log('Using sjData.items:', groupedItems);
+				} else {
+					// If no items in sjData, try to find items by nomor_sj in suratJalanList
+					// This assumes items might be stored separately with nomor_sj reference
+					groupedItems = suratJalanList.filter(item => 
+						item.nomor_sj === sjData.nomor_sj && 
+						(item.nama_finishgood || item.nama_rawmaterial) &&
+						item.quantity
+					).map(item => ({
+						...item,
+						quantity: parseFloat(item.quantity) || 0
+					}));
+					console.log('Using suratJalanList filtered items:', groupedItems);
+				}
 			} 
 			// If printing from form (after save), use form data
 			else if (sjFormData && sjFormData.items) {
@@ -921,9 +946,23 @@
 				).map(item => ({
 					nama_finishgood: item.finish_good_name,
 					nama_rawmaterial: item.raw_material_name,
-					quantity: item.quantity,
+					quantity: parseFloat(item.quantity) || 0, // Ensure quantity is a number
 					satuan: item.satuan
 				}));
+				console.log('Using sjFormData, mapped items:', groupedItems);
+			}
+			
+			console.log('Final groupedItems:', groupedItems);
+			
+			if (!groupedItems || groupedItems.length === 0) {
+				console.warn('No items found for printing, creating placeholder item');
+				// Create a placeholder item if no items found
+				groupedItems = [{
+					nama_finishgood: 'Item tidak ditemukan',
+					nama_rawmaterial: '',
+					quantity: 0,
+					satuan: 'PAIL'
+				}];
 			}
 			
 			const tableData = [];
@@ -931,12 +970,21 @@
 
 			groupedItems.forEach((item, index) => {
 				const namaBarang = item.nama_finishgood || item.nama_rawmaterial || '-';
-				const quantity = item.quantity || 0;
+				const quantity = Number(parseFloat(item.quantity) || 0); // Ensure it's a valid number
 				const satuan = item.satuan || 'PAIL';
 				const quantityText = `${quantity.toFixed(2)} ${satuan}`;
 				const kgPerUnit = satuan.toLowerCase().includes('pail') ? 20 : 1; // Assume 20kg per pail
 				const totalKgItem = quantity * kgPerUnit;
 				totalKg += totalKgItem;
+
+				console.log(`Processing item ${index + 1}:`, {
+					namaBarang,
+					originalQuantity: item.quantity,
+					parsedQuantity: quantity,
+					satuan,
+					quantityText,
+					totalKgItem
+				});
 
 				tableData.push([
 					(index + 1).toString(),
@@ -1080,13 +1128,23 @@
 
 	// Function to print from the list
 	function printFromList(sjData) {
-		printSuratJalan(sjData);
-		
-		toast = {
-			show: true,
-			message: `Surat Jalan ${sjData.nomor_sj} berhasil di-download!`,
-			type: 'success'
-		};
+		try {
+			console.log('Printing surat jalan:', sjData);
+			printSuratJalan(sjData);
+			
+			toast = {
+				show: true,
+				message: `Surat Jalan ${sjData.nomor_sj} berhasil di-download!`,
+				type: 'success'
+			};
+		} catch (error) {
+			console.error('Error in printFromList:', error);
+			toast = {
+				show: true,
+				message: `Error printing Surat Jalan: ${error.message}`,
+				type: 'error'
+			};
+		}
 		setTimeout(() => toast.show = false, 3000);
 	}
 
