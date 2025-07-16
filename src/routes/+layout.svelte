@@ -4,8 +4,13 @@
 	import { onMount } from 'svelte';
 	import { searchTerm } from '$lib/stores/search.js';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
-	import { getSPKNotifications, approveSPKNotification, rejectSPKNotification } from '$lib/services/notifications.js';
+	import {
+		getSPKNotifications,
+		approveSPKNotification,
+		rejectSPKNotification
+	} from '$lib/services/notifications.js';
 	import { productionRequests } from '$lib/stores/notifications.js';
+	import { getRecentSOCustomer } from '$lib/services/socustomer.js';
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -14,7 +19,7 @@
 		{ path: '/inventory/finishedgood', label: 'Finish Good', icon: '🏷️' },
 		{ path: '/inventory/rawmaterial', label: 'Raw Material', icon: '🧱' },
 		{ path: '/inventory/spk-notifications', label: 'SPK Notifications', icon: '🔔' },
-		{ path: '/inventory/produksi-notifications', label: 'Produksi Notifications', icon: '🏭' },
+		{ path: '/inventory/produksi-notifications', label: 'Produksi Notifications', icon: '🏭' }
 	];
 
 	// State for user
@@ -26,6 +31,7 @@
 	let lateItems = [];
 	let waitingApprovalItems = [];
 	let spkNotifications = [];
+	let soCustomerData = [];
 	let rentalData = [];
 	let productionRequestsData = [];
 	let finishedGoodsData = [];
@@ -51,17 +57,17 @@
 		}
 
 		// Subscribe to production requests
-		const unsubscribe = productionRequests.subscribe(value => {
+		const unsubscribe = productionRequests.subscribe((value) => {
 			productionRequestsData = value;
 		});
-		
+
 		// Load production requests from localStorage
 		loadProductionRequests();
-		
+
 		// Listen for production request events
 		window.addEventListener('productionRequestAdded', handleProductionRequestAdded);
 		window.addEventListener('productionRequestDeleted', handleProductionRequestDeleted);
-		
+
 		return () => {
 			unsubscribe();
 			window.removeEventListener('productionRequestAdded', handleProductionRequestAdded);
@@ -239,11 +245,11 @@
 					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
 				}
 			});
-			
+
 			if (!response.ok) return [];
-			
+
 			const data = await response.json();
-			return data.data.map(item => ({
+			return data.data.map((item) => ({
 				...item,
 				status: calculateStatus(item.sisa_stok || 0)
 			}));
@@ -261,16 +267,17 @@
 
 	// Get production notifications (items that need restocking)
 	function getProductionNotifications(finishedGoods) {
-		const dismissedItems = typeof window !== 'undefined' 
-			? JSON.parse(localStorage.getItem('dismissedAutoNotifications') || '[]')
-			: [];
-		const dismissedKodeBaran = dismissedItems.map(item => item.kode_barang);
-		
+		const dismissedItems =
+			typeof window !== 'undefined'
+				? JSON.parse(localStorage.getItem('dismissedAutoNotifications') || '[]')
+				: [];
+		const dismissedKodeBaran = dismissedItems.map((item) => item.kode_barang);
+
 		return finishedGoods
-			.filter(item => item.sisa_stok <= 10) // Items with stock <= 10
-			.filter(item => !dismissedKodeBaran.includes(item.kode_barang)) // Exclude dismissed items
+			.filter((item) => item.sisa_stok <= 10) // Items with stock <= 10
+			.filter((item) => !dismissedKodeBaran.includes(item.kode_barang)) // Exclude dismissed items
 			.sort((a, b) => a.sisa_stok - b.sisa_stok) // Sort by stock level, lowest first
-			.map(item => ({
+			.map((item) => ({
 				id: item.id,
 				kode_barang: item.kode_barang,
 				nama_barang: item.nama_barang,
@@ -294,11 +301,11 @@
 	// Handle new production request event
 	async function handleProductionRequestAdded(event) {
 		const newRequest = event.detail;
-		
+
 		// Reload production notifications to include the new request
 		productionNotifications = getCombinedProductionNotifications();
 		manualProductionRequests = await getManualProductionRequests();
-		
+
 		// Show toast notification
 		showToastNotification({
 			title: 'Permintaan Produksi Baru',
@@ -306,7 +313,7 @@
 			type: 'info',
 			icon: '🏭'
 		});
-		
+
 		console.log('Production request added to notifications:', newRequest);
 		console.log('Total production notifications:', productionNotifications.length);
 		console.log('Manual production requests:', manualProductionRequests.length);
@@ -315,19 +322,21 @@
 	// Handle deleted production request event
 	function handleProductionRequestDeleted(event) {
 		const deletedRequest = event.detail;
-		
+
 		// Reload production notifications to reflect the deletion
 		productionNotifications = getCombinedProductionNotifications();
 		manualProductionRequests = getManualProductionRequests();
-		
+
 		const actionText = deletedRequest.source === 'manual' ? 'dihapus' : 'disembunyikan';
 		showToastNotification({
-			title: 'Produksi Notification ' + (deletedRequest.source === 'manual' ? 'Dihapus' : 'Disembunyikan'),
+			title:
+				'Produksi Notification ' +
+				(deletedRequest.source === 'manual' ? 'Dihapus' : 'Disembunyikan'),
 			message: `${deletedRequest.nama_barang} telah ${actionText}`,
 			type: 'info',
 			icon: '🗑️'
 		});
-		
+
 		console.log('Production request deleted/dismissed:', deletedRequest);
 		console.log('Updated production notifications:', productionNotifications.length);
 		console.log('Updated manual production requests:', manualProductionRequests.length);
@@ -341,14 +350,14 @@
 			message,
 			type,
 			icon,
-			timestamp: new Date().toLocaleTimeString('id-ID', { 
-				hour: '2-digit', 
-				minute: '2-digit' 
+			timestamp: new Date().toLocaleTimeString('id-ID', {
+				hour: '2-digit',
+				minute: '2-digit'
 			})
 		};
-		
+
 		toastNotifications = [...toastNotifications, notification];
-		
+
 		// Auto remove after duration
 		setTimeout(() => {
 			removeToastNotification(notification.id);
@@ -357,17 +366,22 @@
 
 	// Function to remove toast notification
 	function removeToastNotification(id) {
-		toastNotifications = toastNotifications.filter(notification => notification.id !== id);
+		toastNotifications = toastNotifications.filter((notification) => notification.id !== id);
 	}
 
 	// Function to get notification color classes
 	function getToastColor(type) {
 		switch (type) {
-			case 'success': return 'bg-green-500 border-green-600';
-			case 'error': return 'bg-red-500 border-red-600';
-			case 'warning': return 'bg-yellow-500 border-yellow-600';
-			case 'info': return 'bg-blue-500 border-blue-600';
-			default: return 'bg-gray-500 border-gray-600';
+			case 'success':
+				return 'bg-green-500 border-green-600';
+			case 'error':
+				return 'bg-red-500 border-red-600';
+			case 'warning':
+				return 'bg-yellow-500 border-yellow-600';
+			case 'info':
+				return 'bg-blue-500 border-blue-600';
+			default:
+				return 'bg-gray-500 border-gray-600';
 		}
 	}
 
@@ -375,16 +389,17 @@
 	function getCombinedProductionNotifications() {
 		// Get automatic notifications from finished goods
 		const autoNotifications = getProductionNotifications(finishedGoodsData);
-		
+
 		// Get manual requests from localStorage
-		const manualRequests = typeof window !== 'undefined' 
-			? JSON.parse(localStorage.getItem('productionRequests') || '[]')
-			: [];
-		
+		const manualRequests =
+			typeof window !== 'undefined'
+				? JSON.parse(localStorage.getItem('productionRequests') || '[]')
+				: [];
+
 		// Combine and deduplicate by kode_barang
 		const combined = [...autoNotifications];
-		manualRequests.forEach(request => {
-			const exists = combined.find(item => item.kode_barang === request.kode_barang);
+		manualRequests.forEach((request) => {
+			const exists = combined.find((item) => item.kode_barang === request.kode_barang);
 			if (!exists) {
 				combined.push({
 					...request,
@@ -393,7 +408,7 @@
 				});
 			}
 		});
-		
+
 		return combined.sort((a, b) => {
 			// Sort by priority: urgent > high > medium
 			const priorityOrder = { urgent: 3, high: 2, medium: 1 };
@@ -409,17 +424,20 @@
 	async function getManualProductionRequests() {
 		try {
 			// Try to fetch from Directus database first
-			const response = await fetch('https://directus.eltamaprimaindo.com/items/produksi_notifications', {
-				headers: {
-					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+			const response = await fetch(
+				'https://directus.eltamaprimaindo.com/items/produksi_notifications',
+				{
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+					}
 				}
-			});
+			);
 
 			if (response.ok) {
 				const data = await response.json();
 				return data.data
-					.filter(request => request.status !== 'completed') // Only show pending requests
-					.map(request => ({
+					.filter((request) => request.status !== 'completed') // Only show pending requests
+					.map((request) => ({
 						...request,
 						source: 'manual',
 						created_at: request.tanggal_request || new Date().toISOString()
@@ -436,12 +454,13 @@
 		}
 
 		// Fallback to localStorage if database fails
-		const manualRequests = typeof window !== 'undefined' 
-			? JSON.parse(localStorage.getItem('productionRequests') || '[]')
-			: [];
-		
+		const manualRequests =
+			typeof window !== 'undefined'
+				? JSON.parse(localStorage.getItem('productionRequests') || '[]')
+				: [];
+
 		return manualRequests
-			.map(request => ({
+			.map((request) => ({
 				...request,
 				source: 'manual',
 				created_at: request.tanggal_request || new Date().toISOString()
@@ -457,12 +476,12 @@
 		reminders = getReminders(rentalData);
 		lateItems = getLateItems(rentalData);
 		waitingApprovalItems = getWaitingApprovalItems(rentalData);
-		
+
 		// Load finished goods and production notifications
 		finishedGoodsData = await fetchFinishedGoods();
 		productionNotifications = getCombinedProductionNotifications();
 		manualProductionRequests = await getManualProductionRequests();
-		
+
 		// Load SPK notifications
 		try {
 			spkNotifications = await getSPKNotifications();
@@ -471,12 +490,21 @@
 			console.error('Error loading SPK notifications in layout:', error);
 			spkNotifications = [];
 		}
+
+		// Load SO Customer data
+		try {
+			soCustomerData = await getRecentSOCustomer();
+			console.log('SO Customer data loaded in layout:', soCustomerData.length);
+		} catch (error) {
+			console.error('Error loading SO Customer data in layout:', error);
+			soCustomerData = [];
+		}
 	});
 
 	// Handle SPK actions from NotificationBell
 	async function handleSPKAction(event) {
 		const { notificationId, spkId, action } = event.detail;
-		
+
 		try {
 			if (action === 'approve') {
 				await approveSPKNotification(spkId);
@@ -497,7 +525,7 @@
 				});
 				console.log('SPK rejected:', spkId);
 			}
-			
+
 			// Reload SPK notifications after action
 			spkNotifications = await getSPKNotifications();
 		} catch (error) {
@@ -517,8 +545,10 @@
 		<!-- Toast Notifications -->
 		<div class="fixed top-4 right-4 z-50 space-y-2">
 			{#each toastNotifications as notification (notification.id)}
-				<div 
-					class="max-w-sm w-full {getToastColor(notification.type)} shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden transform transition-all duration-300 ease-in-out animate-slide-in"
+				<div
+					class="max-w-sm w-full {getToastColor(
+						notification.type
+					)} shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden transform transition-all duration-300 ease-in-out animate-slide-in"
 				>
 					<div class="p-4">
 						<div class="flex items-start">
@@ -543,7 +573,11 @@
 								>
 									<span class="sr-only">Close</span>
 									<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-										<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+										<path
+											fill-rule="evenodd"
+											d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+											clip-rule="evenodd"
+										/>
 									</svg>
 								</button>
 							</div>
@@ -586,8 +620,12 @@
 									class="absolute inset-0 bg-white/10 rounded-2xl animate-pulse duration-2000"
 								></div>
 								<!-- <span class="relative text-3xl filter drop-shadow-lg"><img src="/Logo-Eltama-Prima-Indo-01.png" alt="Logo" class="w-16 h-16 mb-2 drop-shadow-lg" /></span>  rapihkan logo -->
-								<span class="relative text-3xl font-bold text-white"> 
-									<img src="/Logo-Eltama-Prima-Indo-01.png" alt="Logo" class="w-16 h-16 drop-shadow-lg" /> 
+								<span class="relative text-3xl font-bold text-white">
+									<img
+										src="/Logo-Eltama-Prima-Indo-01.png"
+										alt="Logo"
+										class="w-16 h-16 drop-shadow-lg"
+									/>
 								</span>
 							</div>
 						</div>
@@ -778,14 +816,15 @@
 					<!-- Right Side - Quick Actions -->
 					<div class="flex items-center space-x-4">
 						<!-- Notification Bell -->
-						<NotificationBell 
-							{reminders} 
-							{lateItems} 
-							{waitingApprovalItems} 
+						<NotificationBell
+							{reminders}
+							{lateItems}
+							{waitingApprovalItems}
 							{spkNotifications}
+							{soCustomerData}
 							productionNotifications={manualProductionRequests}
 							productionRequests={productionRequestsData}
-							on:spkAction={handleSPKAction} 
+							on:spkAction={handleSPKAction}
 						/>
 					</div>
 				</div>
