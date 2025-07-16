@@ -436,11 +436,25 @@
 			if (response.ok) {
 				const data = await response.json();
 				return data.data
-					.filter((request) => request.status !== 'completed') // Only show pending requests
+					.filter((request) => {
+						// Only show requests that are NOT done/completed (same logic as produksi-notifications page)
+						return (
+							request.status !== 'completed' &&
+							request.status !== 'produced' &&
+							request.status !== 'done'
+						);
+					})
 					.map((request) => ({
 						...request,
 						source: 'manual',
-						created_at: request.tanggal_request || new Date().toISOString()
+						created_at: request.tanggal_request || new Date().toISOString(),
+						// Calculate priority based on stock level
+						priority: (() => {
+							const stock = parseInt(request.sisa_stok) || 0;
+							if (stock === 0) return 'urgent';
+							if (stock <= 5) return 'high';
+							return 'medium';
+						})()
 					}))
 					.sort((a, b) => {
 						// Sort by timestamp, newest first
@@ -499,6 +513,22 @@
 			console.error('Error loading SO Customer data in layout:', error);
 			soCustomerData = [];
 		}
+
+		// Listen for production request updates from produksi-notifications page
+		const handleProductionRequestUpdate = async () => {
+			console.log('Production request updated, refreshing data...');
+			manualProductionRequests = await getManualProductionRequests();
+			console.log('Updated manual production requests:', manualProductionRequests.length);
+		};
+
+		window.addEventListener('productionRequestDeleted', handleProductionRequestUpdate);
+		window.addEventListener('productionRequestUpdated', handleProductionRequestUpdate);
+
+		// Cleanup event listeners on component destroy
+		return () => {
+			window.removeEventListener('productionRequestDeleted', handleProductionRequestUpdate);
+			window.removeEventListener('productionRequestUpdated', handleProductionRequestUpdate);
+		};
 	});
 
 	// Handle SPK actions from NotificationBell

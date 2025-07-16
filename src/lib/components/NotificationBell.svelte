@@ -37,7 +37,7 @@
 		open = !open;
 	}
 
-	// Reactive statement for debugging
+	// Reactive statement for debugging and auto-tab switching
 	$: {
 		console.log('NotificationBell - Production notifications:', productionNotifications);
 		console.log(
@@ -46,6 +46,27 @@
 		);
 		console.log('NotificationBell - SO Customer data:', soCustomerData);
 		console.log('NotificationBell - SO Customer data length:', soCustomerData.length);
+
+		// Log when production notifications become empty
+		if (productionNotifications.length === 0) {
+			console.log('🎉 All production requests completed! Notifications cleared.');
+
+			// Auto-switch tab if currently on production tab and no more production notifications
+			if (tab === 'production' && open) {
+				if (spkNotifications.length > 0) {
+					tab = 'spk';
+				} else if (lateItems.length > 0) {
+					tab = 'late';
+				} else if (waitingApprovalItems.length > 0) {
+					tab = 'approval';
+				} else if (reminders.length > 0) {
+					tab = 'reminder';
+				} else if (soCustomerData.length > 0) {
+					tab = 'so';
+				}
+				console.log('Auto-switched tab to:', tab);
+			}
+		}
 	}
 
 	function handleClickOutside(event) {
@@ -189,7 +210,13 @@
 						{/if}
 					{:else if tab === 'production'}
 						{#if productionNotifications.length === 0}
-							<div class="text-gray-400 text-sm text-center">Tidak ada permintaan produksi</div>
+							<div class="text-center py-6">
+								<div class="text-green-600 text-4xl mb-2">✅</div>
+								<div class="text-green-600 text-sm font-medium">Semua Stok Mencukupi!</div>
+								<div class="text-gray-500 text-xs mt-1">
+									Tidak ada permintaan produksi saat ini.
+								</div>
+							</div>
 						{:else}
 							{#each productionNotifications.slice(0, 5) as item}
 								<div class="mb-3 p-3 rounded bg-purple-50 border border-purple-100">
