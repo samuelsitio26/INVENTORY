@@ -1,4 +1,4 @@
-<script>
+<script></script>
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { searchTerm } from '$lib/stores/search.js';
@@ -6,20 +6,15 @@
 	let data = [];
 	let loading = true;
 	let error = '';
-	let undoTimeouts = {};
-	let undoTimers = {};
+	let selectedItem = null;
 	let showConfirm = false;
 	let confirmAction = null;
-	let selectedItem = null;
 	let showDetailModal = false;
 	let detailItem = null;
-	const UNDO_DURATION = 300000; // 5 menit dalam ms
 
-	// 1. User login & role mapping
+	// User login & role mapping
 	let user = null;
 
-	// Simulasi: ambil user dari localStorage/session (atau hardcode untuk demo)
-	// Ganti dengan logic login sesungguhnya jika sudah ada
 	onMount(() => {
 		const email = localStorage.getItem('user_email');
 		if (email === 'managerdept@eltama.com') {
@@ -43,42 +38,13 @@
 		return `${day}-${month}-${year}`;
 	}
 
-	// Function untuk hitung status pengembalian
-	function calculateReturnStatus(borrowDate, duration, actualReturnDate, returned) {
-		if (!returned) return '-';
-		if (!actualReturnDate) return '-';
-
-		const expectedDate = new Date(borrowDate);
-		expectedDate.setDate(expectedDate.getDate() + duration);
-		const actualDate = new Date(actualReturnDate);
-
-		if (actualDate <= expectedDate) {
-			return { status: 'Tepat Waktu', class: 'bg-green-100 text-green-800' };
-		} else {
-			const diffTime = actualDate - expectedDate;
-			const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-			return {
-				status: `Terlambat (${diffDays} hari)`,
-				class: 'bg-red-100 text-red-800'
-			};
-		}
-	}
-
-	// Function untuk hitung tanggal jatuh tempo
-	function calculateDueDate(borrowDate, duration) {
-		if (!borrowDate || !duration) return '-';
-		const date = new Date(borrowDate);
-		date.setDate(date.getDate() + duration);
-		return formatDate(date.toISOString());
-	}
-
-	// Fetch data dari Directus dengan informasi lengkap
-	async function fetchRentalData() {
+	// Fetch data consumable dari Directus
+	async function fetchConsumableData() {
 		try {
-			console.log('Fetching rental data from Directus...');
+			console.log('Fetching consumable data from Directus...');
 
 			const response = await fetch(
-				'https://directus.eltamaprimaindo.com/items/rentals?fields=*,barang_id.id,barang_id.Nama,barang_id.StokIn,barang_id.parent_category.parent_category,barang_id.sub_category.nama_sub',
+				'https://directus.eltamaprimaindo.com/items/consumables?fields=*,barang_id.id,barang_id.Nama,barang_id.StokIn,barang_id.parent_category.parent_category,barang_id.sub_category.nama_sub',
 				{
 					headers: {
 						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
@@ -88,7 +54,6 @@
 			);
 
 			console.log('Response status:', response.status);
-			console.log('Response headers:', response.headers);
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -107,22 +72,13 @@
 			return result.data.map((item, index) => {
 				console.log(`Processing item ${index + 1}:`, item);
 
-				const returnStatus = calculateReturnStatus(
-					item.borrow_date,
-					item.duration,
-					item.actual_return_date,
-					item.returned
-				);
-
-				// Penentuan status baru: Pending, Approved, Dipinjam, Dikembalikan
+				// Status: Pending, Approved, Used
 				let status = 'Pending';
 				if (item.approved) {
 					status = 'Approved';
 				}
-				if (item.returned) {
-					status = 'Dikembalikan';
-				} else if (item.borrowed) {
-					status = 'Dipinjam';
+				if (item.used) {
+					status = 'Used';
 				}
 
 				return {
@@ -131,84 +87,76 @@
 					kategori: item.barang_id?.parent_category?.parent_category || '-',
 					subKategori: item.barang_id?.sub_category?.nama_sub || '-',
 					qty: item.qty ?? '-',
-					peminjam: item.borrower || '-',
-					tanggalPinjam: formatDate(item.borrow_date),
-					tanggalJatuhTempo: calculateDueDate(item.borrow_date, item.duration),
-					durasiPinjam: item.duration ? `${item.duration} hari` : '-',
-					tanggalKembaliAktual: item.actual_return_date ? formatDate(item.actual_return_date) : '-',
+					requestedBy: item.requested_by || '-',
+					tanggalRequest: formatDate(item.request_date),
+					tanggalApproval: item.approval_date ? formatDate(item.approval_date) : '-',
+					tanggalPakai: item.use_date ? formatDate(item.use_date) : '-',
 					status,
-					statusPengembalian: returnStatus,
-					kondisiKembali: item.return_condition || '-',
-					keterangan: item.return_notes || '-',
-					undoUntil: null,
+					keperluan: item.purpose || '-',
+					keterangan: item.notes || '-',
 					approvals: item.approvals || {},
 					// Raw data untuk keperluan lain
-					rawBorrowDate: item.borrow_date,
-					rawDuration: item.duration,
-					rawActualReturnDate: item.actual_return_date
+					rawRequestDate: item.request_date,
+					rawApprovalDate: item.approval_date,
+					rawUseDate: item.use_date
 				};
 			});
 		} catch (e) {
-			console.error('Error fetch rental:', e);
+			console.error('Error fetch consumable:', e);
 			// Return sample data untuk testing jika API gagal
 			return [
 				{
 					id: 'sample-1',
-					nama: 'Laptop Dell',
-					kategori: 'Elektronik',
-					subKategori: 'Komputer',
-					qty: 1,
-					peminjam: 'John Doe',
-					tanggalPinjam: '20-06-2025',
-					tanggalJatuhTempo: '27-06-2025',
-					durasiPinjam: '7 hari',
-					tanggalKembaliAktual: '-',
-					status: 'Pending',
-					statusPengembalian: '-',
-					kondisiKembali: '-',
-					keterangan: 'Untuk presentasi client',
-					undoUntil: null,
-					approvals: {},
-					rawBorrowDate: '2025-06-20',
-					rawDuration: 7,
-					rawActualReturnDate: null
-				},
-				{
-					id: 'sample-2',
-					nama: 'Projector Epson',
-					kategori: 'Elektronik',
-					subKategori: 'Presentasi',
-					qty: 1,
-					peminjam: 'Jane Smith',
-					tanggalPinjam: '15-06-2025',
-					tanggalJatuhTempo: '22-06-2025',
-					durasiPinjam: '7 hari',
-					tanggalKembaliAktual: '21-06-2025',
+					nama: 'Kertas A4',
+					kategori: 'Office Supplies',
+					subKategori: 'Stationery',
+					qty: 5,
+					requestedBy: 'John Doe',
+					tanggalRequest: '20-06-2025',
+					tanggalApproval: '21-06-2025',
+					tanggalPakai: '-',
 					status: 'Approved',
-					statusPengembalian: { status: 'Tepat Waktu', class: 'bg-green-100 text-green-800' },
-					kondisiKembali: 'Baik',
-					keterangan: 'Dikembalikan dalam kondisi baik',
-					undoUntil: null,
+					keperluan: 'Untuk printing dokumen',
+					keterangan: 'Urgent untuk meeting client',
 					approvals: {
 						dept: {
 							by: 'managerdept@eltama.com',
 							name: 'Manager Dept',
-							at: '2025-06-27T10:00:00Z'
+							at: '2025-06-21T10:00:00Z'
+						}
+					},
+					rawRequestDate: '2025-06-20',
+					rawApprovalDate: '2025-06-21',
+					rawUseDate: null
+				},
+				{
+					id: 'sample-2',
+					nama: 'Tinta Printer HP',
+					kategori: 'Office Supplies',
+					subKategori: 'Printer Supplies',
+					qty: 2,
+					requestedBy: 'Jane Smith',
+					tanggalRequest: '18-06-2025',
+					tanggalApproval: '19-06-2025',
+					tanggalPakai: '20-06-2025',
+					status: 'Used',
+					keperluan: 'Refill tinta printer departemen',
+					keterangan: 'Tinta sudah habis, perlu segera diganti',
+					approvals: {
+						dept: {
+							by: 'managerdept@eltama.com',
+							name: 'Manager Dept',
+							at: '2025-06-19T09:00:00Z'
 						},
 						inventory: {
 							by: 'inventoryadmin@eltama.com',
 							name: 'Inventory Manager',
-							at: '2025-06-27T11:00:00Z'
-						},
-						procurement: {
-							by: 'procurementmanager@eltama.com',
-							name: 'Procurement Manager',
-							at: '2025-06-27T12:00:00Z'
+							at: '2025-06-19T10:00:00Z'
 						}
 					},
-					rawBorrowDate: '2025-06-15',
-					rawDuration: 7,
-					rawActualReturnDate: '2025-06-21'
+					rawRequestDate: '2025-06-18',
+					rawApprovalDate: '2025-06-19',
+					rawUseDate: '2025-06-20'
 				}
 			];
 		}
@@ -217,11 +165,11 @@
 	onMount(async () => {
 		try {
 			console.log('Component mounted, fetching data...');
-			data = await fetchRentalData();
+			data = await fetchConsumableData();
 			console.log('Data loaded:', data);
 		} catch (e) {
 			console.error('Error in onMount:', e);
-			error = e.message || 'Gagal mengambil data rental';
+			error = e.message || 'Gagal mengambil data consumable';
 		} finally {
 			loading = false;
 		}
@@ -239,15 +187,6 @@
 		confirmAction = null;
 	}
 
-	function handleReturn(item) {
-		// Redirect ke halaman pengembalian dengan autofill data barang
-		goto('/inventory/pengembalian', {
-			state: {
-				barang: item
-			}
-		});
-	}
-
 	function handleViewDetail(item) {
 		detailItem = item;
 		showDetailModal = true;
@@ -258,39 +197,26 @@
 		detailItem = null;
 	}
 
-	function handleUndo(item) {
-		openConfirm(item, 'undo');
-	}
-
 	function confirmHandler() {
-		if (confirmAction === 'return') {
-			// Ubah status jadi Dikembalikan, aktifkan undo
+		if (confirmAction === 'use') {
+			// Ubah status jadi Used
 			const idx = data.findIndex((d) => d.id === selectedItem.id);
 			if (idx !== -1) {
-				data[idx].status = 'Dikembalikan';
-				data[idx].undoUntil = Date.now() + UNDO_DURATION;
-				// Set timer untuk hapus undo
-				if (undoTimers[selectedItem.id]) clearTimeout(undoTimers[selectedItem.id]);
-				undoTimers[selectedItem.id] = setTimeout(() => {
-					const i = data.findIndex((d) => d.id === selectedItem.id);
-					if (i !== -1) {
-						delete data[i].undoUntil;
-					}
-				}, UNDO_DURATION);
+				data[idx].status = 'Used';
+				data[idx].tanggalPakai = formatDate(new Date().toISOString());
 			}
-		} else if (confirmAction === 'undo') {
-			// Batalkan pengembalian
+		} else if (confirmAction === 'approve') {
+			// Approve item
 			const idx = data.findIndex((d) => d.id === selectedItem.id);
 			if (idx !== -1) {
-				data[idx].status = 'Dipinjam';
-				delete data[idx].undoUntil;
-				if (undoTimers[selectedItem.id]) clearTimeout(undoTimers[selectedItem.id]);
+				data[idx].status = 'Approved';
+				data[idx].tanggalApproval = formatDate(new Date().toISOString());
 			}
 		}
 		closeConfirm();
 	}
 
-	// Fungsi Approve dan Pinjam
+	// Fungsi Approve
 	function getApprovalStage(item) {
 		if (!item.approvals?.dept) return 'dept';
 		if (!item.approvals?.inventory) return 'inventory';
@@ -320,98 +246,47 @@
 			data[idx].approvals.procurement = { by: user.email, name: user.name, at: now };
 		}
 
+		// Check if all approvals are done
+		if (getApprovalStage(data[idx]) === 'done') {
+			data[idx].status = 'Approved';
+		}
+
 		// Simpan ke backend Directus
 		try {
-			await fetch(`https://directus.eltamaprimaindo.com/items/rentals/${item.id}`, {
+			await fetch(`https://directus.eltamaprimaindo.com/items/consumables/${item.id}`, {
 				method: 'PATCH',
 				headers: {
 					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
 					'Content-Type': 'application/json'
 				},
-				body: JSON.stringify({ approvals: data[idx].approvals })
+				body: JSON.stringify({ 
+					approvals: data[idx].approvals,
+					approved: getApprovalStage(data[idx]) === 'done'
+				})
 			});
 			// Refresh data agar approval stage update
-			data = await fetchRentalData();
+			data = await fetchConsumableData();
 		} catch (e) {
 			alert('Gagal menyimpan approval ke server!');
 		}
 	}
-	function handlePinjam(item) {
-		const idx = data.findIndex((d) => d.id === item.id);
-		if (idx !== -1) {
-			data[idx].status = 'Dipinjam';
-		}
-	}
 
-	function canUndo(item) {
-		return item.status === 'Dikembalikan' && item.undoUntil && item.undoUntil > Date.now();
+	function handleUse(item) {
+		openConfirm(item, 'use');
 	}
-
-	function getUndoCountdown(item) {
-		if (!item.undoUntil) return '';
-		const ms = item.undoUntil - Date.now();
-		if (ms <= 0) return '';
-		const min = Math.floor(ms / 60000);
-		const sec = Math.floor((ms % 60000) / 1000);
-		return `(${min}:${sec.toString().padStart(2, '0')})`;
-	}
-
-	// Filter data rental sesuai searchTerm global
-	$: filteredData = data.filter((item) => {
-		// Filter tanggal pinjam
-		let passDate = true;
-		if (filterStartDate) {
-			const [d, m, y] = item.tanggalPinjam.split('-');
-			const tgl = new Date(`${y}-${m}-${d}`);
-			passDate = passDate && tgl >= new Date(filterStartDate);
-		}
-		if (filterEndDate) {
-			const [d, m, y] = item.tanggalPinjam.split('-');
-			const tgl = new Date(`${y}-${m}-${d}`);
-			passDate = passDate && tgl <= new Date(filterEndDate);
-		}
-		// Filter status
-		let passStatus = !filterStatus || getStatusLabel(item) === filterStatus;
-		// Filter search
-		let search = filterSearch.toLowerCase();
-		let passSearch =
-			!search ||
-			item.nama?.toLowerCase().includes(search) ||
-			item.kategori?.toLowerCase().includes(search) ||
-			item.subKategori?.toLowerCase().includes(search) ||
-			item.peminjam?.toLowerCase().includes(search);
-		return passDate && passStatus && passSearch;
-	});
 
 	function getStatusBadgeClass(status) {
 		if (status === 'Pending') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
 		if (status === 'Dept Approved') return 'bg-purple-100 text-purple-800 border-purple-300';
 		if (status === 'Inventory Approved') return 'bg-indigo-100 text-indigo-800 border-indigo-300';
 		if (status === 'Approved') return 'bg-green-100 text-green-800 border-green-300';
-		if (status === 'Dipinjam') return 'bg-blue-100 text-blue-800 border-blue-300';
-		if (status === 'Dikembalikan') return 'bg-gray-100 text-gray-700 border-gray-300';
+		if (status === 'Used') return 'bg-gray-100 text-gray-700 border-gray-300';
 		return 'bg-gray-100 text-gray-700 border-gray-300';
 	}
 
-	// Hitung barang yang sudah terlambat (status Dipinjam, jatuh tempo < hari ini)
-	$: lateItems = data.filter((item) => {
-		if (item.status !== 'Dipinjam') return false;
-		if (!item.tanggalJatuhTempo) return false;
-		const [day, month, year] = item.tanggalJatuhTempo.split('-');
-		const dueDate = new Date(`${year}-${month}-${day}`);
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
-		return dueDate < today;
-	});
-
-	// Hitung barang yang menunggu approval (status Pending atau belum semua approval terpenuhi)
-	$: waitingApprovalItems = data.filter((item) => {
-		const stage = getApprovalStage(item);
-		return stage !== 'done';
-	});
-
 	function getStatusLabel(item) {
 		const stage = getApprovalStage(item);
+		if (item.status === 'Used') return 'Used';
 		if (stage === 'dept') return 'Pending';
 		if (stage === 'inventory') return 'Dept Approved';
 		if (stage === 'procurement') return 'Inventory Approved';
@@ -424,71 +299,76 @@
 	let filterStatus = '';
 	let filterSearch = '';
 
+	// Filter data consumable sesuai filter
+	$: filteredData = data.filter((item) => {
+		// Filter tanggal request
+		let passDate = true;
+		if (filterStartDate) {
+			const [d, m, y] = item.tanggalRequest.split('-');
+			const tgl = new Date(`${y}-${m}-${d}`);
+			passDate = passDate && tgl >= new Date(filterStartDate);
+		}
+		if (filterEndDate) {
+			const [d, m, y] = item.tanggalRequest.split('-');
+			const tgl = new Date(`${y}-${m}-${d}`);
+			passDate = passDate && tgl <= new Date(filterEndDate);
+		}
+		// Filter status
+		let passStatus = !filterStatus || getStatusLabel(item) === filterStatus;
+		// Filter search
+		let search = filterSearch.toLowerCase();
+		let passSearch =
+			!search ||
+			item.nama?.toLowerCase().includes(search) ||
+			item.kategori?.toLowerCase().includes(search) ||
+			item.subKategori?.toLowerCase().includes(search) ||
+			item.requestedBy?.toLowerCase().includes(search) ||
+			item.keperluan?.toLowerCase().includes(search);
+		return passDate && passStatus && passSearch;
+	});
+
 	// Pilihan Warna Gradient dengan color preview
 	let colorOptions = [
 		{
-			name: 'Blue',
-			gradient: 'from-white to-blue-900 border-blue-900',
-			color: 'bg-blue-900',
-			preview: 'bg-gradient-to-br from-white to-blue-900'
+			name: 'Orange',
+			gradient: 'from-white to-orange-900 border-orange-900',
+			color: 'bg-orange-900',
+			preview: 'bg-gradient-to-br from-white to-orange-900'
 		},
 		{
-			name: 'Green',
-			gradient: 'from-white to-green-900 border-green-900',
-			color: 'bg-green-900',
-			preview: 'bg-gradient-to-br from-white to-green-900'
+			name: 'Purple',
+			gradient: 'from-white to-purple-900 border-purple-900',
+			color: 'bg-purple-900',
+			preview: 'bg-gradient-to-br from-white to-purple-900'
 		},
 		{
-			name: 'Red',
-			gradient: 'from-white to-red-900 border-red-900',
-			color: 'bg-red-900',
-			preview: 'bg-gradient-to-br from-white to-red-900'
+			name: 'Pink',
+			gradient: 'from-white to-pink-900 border-pink-900',
+			color: 'bg-pink-900',
+			preview: 'bg-gradient-to-br from-white to-pink-900'
 		},
 		{
-			name: 'Teal',
-			gradient: 'from-white to-teal-900 border-teal-900',
-			color: 'bg-teal-900',
-			preview: 'bg-gradient-to-br from-white to-teal-900'
+			name: 'Emerald',
+			gradient: 'from-white to-emerald-900 border-emerald-900',
+			color: 'bg-emerald-900',
+			preview: 'bg-gradient-to-br from-white to-emerald-900'
 		},
 		{
-			name: 'Indigo',
-			gradient: 'from-white to-indigo-900 border-indigo-900',
-			color: 'bg-indigo-900',
-			preview: 'bg-gradient-to-br from-white to-indigo-900'
+			name: 'Cyan',
+			gradient: 'from-white to-cyan-900 border-cyan-900',
+			color: 'bg-cyan-900',
+			preview: 'bg-gradient-to-br from-white to-cyan-900'
 		}
 	];
 	let selectedGradient = colorOptions[0].gradient;
 
-	// Fungsi untuk edit peminjaman
-	function handleEditPeminjaman(item) {
-		if (!user || !user.role) {
-			alert('Akses ditolak: Role user tidak valid');
-			return;
-		}
-
-		// Hanya bisa edit jika belum disetujui sepenuhnya
-		const stage = getApprovalStage(item);
-		if (stage === 'done' && item.status !== 'Pending') {
-			alert('Tidak dapat mengedit: Peminjaman sudah disetujui sepenuhnya');
-			return;
-		}
-
-		// Redirect ke halaman edit atau buka modal edit
-		// Untuk sementara, tampilkan alert sebagai placeholder
-		alert(`Edit peminjaman "${item.nama}"\n\nFitur edit akan diarahkan ke halaman/modal edit peminjaman`);
-		
-		// TODO: Implementasi redirect atau modal edit
-		// goto(`/inventory/rental/edit/${item.id}`);
-	}
-
-	function handleAddPeminjaman() {
-		goto('/inventory/peminjaman/create');
+	function handleAddConsumable() {
+		goto('/inventory/consumable/create');
 	}
 
 	function handleRefresh() {
 		location.reload();
 	}
-
 </script>
 
 <div
@@ -499,19 +379,19 @@
 	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
 		<div>
 			<h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">
-				Peminjaman Barang
+				Manajemen Barang Consumable
 			</h1>
-			<p class="mt-1 text-sm text-gray-500">Status procurement dan persetujuan peminjaman alat</p>
+			<p class="mt-1 text-sm text-gray-500">Kelola permintaan dan penggunaan barang habis pakai</p>
 		</div>
 		<div class="flex gap-2 mt-4 sm:mt-0">
 			<button
-				on:click={handleAddPeminjaman}
-				class="px-5 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow"
-				>Tambah Peminjaman</button
+				on:click={handleAddConsumable}
+				class="px-5 py-3 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 transition-colors shadow"
+				>Tambah Request</button
 			>
 			<button
 				on:click={handleRefresh}
-				class="px-5 py-3 bg-gray-600 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors shadow"
+				class="px-5 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow"
 				>Refresh</button
 			>
 		</div>
@@ -522,12 +402,12 @@
 		style="margin-left:-20px; margin-right:-20px;"
 	>
 		<div class="flex flex-row gap-8 xl:gap-12">
-			<!-- Panel Kiri: Daftar Peminjaman -->
+			<!-- Panel Kiri: Daftar Consumable -->
 			<div
 				class="flex flex-col h-full min-h-0"
 				style="width:38%; min-width:420px; max-width:520px;"
 			>
-				<!-- Filter & Search (tetap di atas, tidak ikut scroll) -->
+				<!-- Filter & Search -->
 				<div
 					class="flex flex-col gap-3 mb-4 p-4 bg-white rounded-xl border border-gray-200 shadow-sm"
 				>
@@ -535,7 +415,7 @@
 						<input
 							type="date"
 							bind:value={filterStartDate}
-							class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+							class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
 							placeholder="Dari"
 							style="width: 150px;"
 						/>
@@ -543,7 +423,7 @@
 						<input
 							type="date"
 							bind:value={filterEndDate}
-							class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+							class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
 							placeholder="Sampai"
 							style="width: 150px;"
 						/>
@@ -551,7 +431,7 @@
 					<div class="flex flex-wrap gap-2 items-center">
 						<select
 							bind:value={filterStatus}
-							class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
+							class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors bg-white"
 							style="min-width: 140px;"
 						>
 							<option value="">Semua Status</option>
@@ -559,14 +439,13 @@
 							<option value="Dept Approved">Dept Approved</option>
 							<option value="Inventory Approved">Inventory Approved</option>
 							<option value="Approved">Approved</option>
-							<option value="Dipinjam">Dipinjam</option>
-							<option value="Dikembalikan">Dikembalikan</option>
+							<option value="Used">Used</option>
 						</select>
 						<input
 							type="text"
 							bind:value={filterSearch}
-							placeholder="Cari barang/peminjam..."
-							class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+							placeholder="Cari barang/pemohon..."
+							class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
 							style="min-width: 200px;"
 						/>
 					</div>
@@ -578,25 +457,25 @@
 					<div class="space-y-2 pb-2">
 						{#each filteredData as item, i}
 							<div
-								class="flex items-center bg-white shadow-sm rounded-xl border border-gray-200 px-5 py-3 gap-4 cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all duration-200 procurement-card {selectedItem &&
+								class="flex items-center bg-white shadow-sm rounded-xl border border-gray-200 px-5 py-3 gap-4 cursor-pointer hover:shadow-lg hover:border-orange-300 transition-all duration-200 {selectedItem &&
 								selectedItem.id === item.id
-									? 'ring-2 ring-blue-500 border-blue-400 shadow-lg bg-blue-50'
+									? 'ring-2 ring-orange-500 border-orange-400 shadow-lg bg-orange-50'
 									: 'hover:bg-gray-50'}"
 								on:click={() => (selectedItem = item)}
 							>
 								<div
-									class="w-9 h-9 flex items-center justify-center rounded-full font-bold text-sm bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md"
+									class="w-9 h-9 flex items-center justify-center rounded-full font-bold text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-md"
 								>
 									#{i + 1}
 								</div>
 								<div class="flex-1 min-w-0">
 									<div class="font-bold text-gray-900 truncate text-sm">{item.nama}</div>
 									<div class="text-xs text-gray-500 truncate">
-										{item.kategori} • Peminjam: {item.peminjam}
+										{item.kategori} • Pemohon: {item.requestedBy}
 									</div>
 								</div>
 								<span
-									class="ml-auto px-3 py-1.5 rounded-full text-xs font-bold border status-badge {getStatusBadgeClass(
+									class="ml-auto px-3 py-1.5 rounded-full text-xs font-bold border {getStatusBadgeClass(
 										getStatusLabel(item)
 									)}">{getStatusLabel(item)}</span
 								>
@@ -606,7 +485,7 @@
 				</div>
 			</div>
 
-			<!-- Panel Kanan: Detail Peminjaman -->
+			<!-- Panel Kanan: Detail Consumable -->
 			<div
 				class="flex-1 min-h-0 flex flex-col overflow-y-auto"
 				style="min-width:420px; max-width:900px; width:100%; min-height:400px; max-height:calc(100vh - 120px);"
@@ -624,7 +503,7 @@
 								<div class="flex items-center justify-between mb-6">
 									<div class="flex items-center gap-4">
 										<div
-											class="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg"
+											class="w-12 h-12 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg"
 										>
 											<svg
 												class="w-6 h-6 text-white"
@@ -636,13 +515,13 @@
 													stroke-linecap="round"
 													stroke-linejoin="round"
 													stroke-width="2"
-													d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+													d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
 												/>
 											</svg>
 										</div>
 										<div>
-											<h2 class="text-2xl font-bold text-gray-900">Detail Peminjaman</h2>
-											<p class="text-sm text-gray-600">Informasi lengkap peminjaman barang</p>
+											<h2 class="text-2xl font-bold text-gray-900">Detail Consumable</h2>
+											<p class="text-sm text-gray-600">Informasi lengkap permintaan barang</p>
 										</div>
 									</div>
 									<span
@@ -652,6 +531,7 @@
 										>{getStatusLabel(selectedItem)}</span
 									>
 								</div>
+								
 								<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 									<!-- Card Informasi Barang -->
 									<div
@@ -671,13 +551,13 @@
 														stroke-linecap="round"
 														stroke-linejoin="round"
 														stroke-width="2"
-														d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+														d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
 													/>
 												</svg>
 											</div>
 											<div>
 												<h3 class="text-lg font-bold text-gray-900">Informasi Barang</h3>
-												<p class="text-xs text-gray-500">Detail produk yang dipinjam</p>
+												<p class="text-xs text-gray-500">Detail produk consumable</p>
 											</div>
 										</div>
 										<div class="space-y-4">
@@ -748,37 +628,37 @@
 											</div>
 											<div>
 												<h3 class="text-lg font-bold text-gray-900">Timeline</h3>
-												<p class="text-xs text-gray-500">Jadwal peminjaman</p>
+												<p class="text-xs text-gray-500">Riwayat permohonan</p>
 											</div>
 										</div>
 										<div class="space-y-4">
 											<div class="p-3 bg-gray-50 rounded-xl">
 												<div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
-													Tanggal Pinjam
+													Tanggal Request
 												</div>
 												<div class="text-lg text-gray-900 font-bold">
-													{selectedItem.tanggalPinjam}
+													{selectedItem.tanggalRequest}
 												</div>
 											</div>
 											<div class="grid grid-cols-1 gap-3">
-												<div class="p-3 bg-red-50 rounded-xl border border-red-100">
-													<div
-														class="text-xs font-medium text-red-600 uppercase tracking-wide mb-1"
-													>
-														Jatuh Tempo
-													</div>
-													<div class="text-sm text-gray-900 font-semibold">
-														{selectedItem.tanggalJatuhTempo}
-													</div>
-												</div>
 												<div class="p-3 bg-green-50 rounded-xl border border-green-100">
 													<div
 														class="text-xs font-medium text-green-600 uppercase tracking-wide mb-1"
 													>
-														Durasi Pinjam
+														Tanggal Approval
 													</div>
 													<div class="text-sm text-gray-900 font-semibold">
-														{selectedItem.durasiPinjam}
+														{selectedItem.tanggalApproval}
+													</div>
+												</div>
+												<div class="p-3 bg-red-50 rounded-xl border border-red-100">
+													<div
+														class="text-xs font-medium text-red-600 uppercase tracking-wide mb-1"
+													>
+														Tanggal Pakai
+													</div>
+													<div class="text-sm text-gray-900 font-semibold">
+														{selectedItem.tanggalPakai}
 													</div>
 												</div>
 											</div>
@@ -786,7 +666,7 @@
 									</div>
 								</div>
 
-								<!-- Informasi Peminjam -->
+								<!-- Informasi Request -->
 								<div class="bg-white rounded-2xl p-6 shadow-md border border-gray-100">
 									<div class="flex items-center gap-3 mb-4">
 										<div
@@ -807,25 +687,25 @@
 											</svg>
 										</div>
 										<div>
-											<h3 class="text-lg font-bold text-gray-900">Informasi Peminjam</h3>
-											<p class="text-xs text-gray-500">Detail peminjaman</p>
+											<h3 class="text-lg font-bold text-gray-900">Informasi Request</h3>
+											<p class="text-xs text-gray-500">Detail permohonan</p>
 										</div>
 									</div>
 									<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 										<div class="p-3 bg-gray-50 rounded-xl">
 											<div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
-												Nama Peminjam
+												Pemohon
 											</div>
 											<div class="text-sm text-gray-900 font-semibold">
-												{selectedItem.peminjam}
+												{selectedItem.requestedBy}
 											</div>
 										</div>
 										<div class="p-3 bg-yellow-50 rounded-xl border border-yellow-100">
 											<div class="text-xs font-medium text-yellow-600 uppercase tracking-wide mb-1">
-												Tanggal Kembali Aktual
+												Keperluan
 											</div>
 											<div class="text-sm text-gray-900 font-semibold">
-												{selectedItem.tanggalKembaliAktual}
+												{selectedItem.keperluan}
 											</div>
 										</div>
 									</div>
@@ -841,57 +721,6 @@
 									{/if}
 								</div>
 
-								<!-- Status dan Kondisi Barang -->
-								{#if (selectedItem.statusPengembalian && selectedItem.statusPengembalian.status !== '-') || selectedItem.kondisiKembali !== '-'}
-									<div class="bg-white rounded-2xl p-6 shadow-md border border-gray-100">
-										<div class="flex items-center gap-3 mb-4">
-											<div
-												class="w-10 h-10 bg-gradient-to-r from-amber-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-sm"
-											>
-												<svg
-													class="w-5 h-5 text-white"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-													/>
-												</svg>
-											</div>
-											<div>
-												<h3 class="text-lg font-bold text-gray-900">Status Pengembalian</h3>
-												<p class="text-xs text-gray-500">Informasi kondisi barang</p>
-											</div>
-										</div>
-										<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-											{#if selectedItem.statusPengembalian && selectedItem.statusPengembalian.status !== '-'}
-												<div class="p-3 rounded-xl {selectedItem.statusPengembalian.class || 'bg-gray-50'}">
-													<div class="text-xs font-medium uppercase tracking-wide mb-1">
-														Status Waktu
-													</div>
-													<div class="text-sm font-semibold">
-														{selectedItem.statusPengembalian.status}
-													</div>
-												</div>
-											{/if}
-											{#if selectedItem.kondisiKembali !== '-'}
-												<div class="p-3 bg-blue-50 rounded-xl border border-blue-100">
-													<div class="text-xs font-medium text-blue-600 uppercase tracking-wide mb-1">
-														Kondisi Barang
-													</div>
-													<div class="text-sm text-gray-900 font-semibold">
-														{selectedItem.kondisiKembali}
-													</div>
-												</div>
-											{/if}
-										</div>
-									</div>
-								{/if}
-
 								<!-- Action Buttons -->
 								{#if user && user.role}
 									<div class="flex gap-3 mt-4">
@@ -905,26 +734,10 @@
 										{/if}
 										{#if selectedItem.status === 'Approved' && user.role === 'Inventory Manager'}
 											<button
-												on:click={() => handlePinjam(selectedItem)}
-												class="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg"
-											>
-												Tandai Dipinjam
-											</button>
-										{/if}
-										{#if selectedItem.status === 'Dipinjam'}
-											<button
-												on:click={() => handleReturn(selectedItem)}
+												on:click={() => handleUse(selectedItem)}
 												class="px-6 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors shadow-lg"
 											>
-												Kembalikan
-											</button>
-										{/if}
-										{#if canUndo(selectedItem)}
-											<button
-												on:click={() => handleUndo(selectedItem)}
-												class="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors shadow-lg"
-											>
-												Undo {getUndoCountdown(selectedItem)}
+												Tandai Sudah Digunakan
 											</button>
 										{/if}
 									</div>
@@ -975,33 +788,14 @@
 											</div>
 										</div>
 
-										<!-- Procurement Approval -->
-										<div class="relative z-10 flex flex-col items-center">
-											<div class={`w-10 h-10 rounded-full flex items-center justify-center ${selectedItem.approvals?.procurement ? 'bg-green-500' : 'bg-gray-300'}`}>
-												<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													{#if selectedItem.approvals?.procurement}
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-													{:else}
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-													{/if}
-												</svg>
-											</div>
-											<div class="mt-2 text-center">
-												<div class="text-xs font-semibold text-gray-900">Procurement</div>
-												<div class="text-xs text-gray-500">
-													{selectedItem.approvals?.procurement ? selectedItem.approvals.procurement.name : 'Waiting'}
-												</div>
-											</div>
-										</div>
-
 										<!-- Final Status -->
 										<div class="relative z-10 flex flex-col items-center">
-											<div class={`w-10 h-10 rounded-full flex items-center justify-center ${selectedItem.status === 'Dikembalikan' ? 'bg-blue-500' : selectedItem.status === 'Dipinjam' ? 'bg-green-500' : 'bg-gray-300'}`}>
+											<div class={`w-10 h-10 rounded-full flex items-center justify-center ${selectedItem.status === 'Used' ? 'bg-blue-500' : selectedItem.status === 'Approved' ? 'bg-green-500' : 'bg-gray-300'}`}>
 												<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													{#if selectedItem.status === 'Dikembalikan'}
+													{#if selectedItem.status === 'Used'}
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-													{:else if selectedItem.status === 'Dipinjam'}
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+													{:else if selectedItem.status === 'Approved'}
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
 													{:else}
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
 													{/if}
@@ -1034,11 +828,11 @@
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										stroke-width="2"
-										d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+										d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
 									/>
 								</svg>
-								<h3 class="mt-2 text-sm font-medium text-gray-900">Pilih peminjaman di sebelah kiri</h3>
-								<p class="mt-1 text-sm text-gray-500">untuk melihat detail peminjaman barang</p>
+								<h3 class="mt-2 text-sm font-medium text-gray-900">Pilih barang di sebelah kiri</h3>
+								<p class="mt-1 text-sm text-gray-500">untuk melihat detail consumable</p>
 							</div>
 						</div>
 					{/if}
@@ -1085,13 +879,9 @@
 					</div>
 				</div>
 				<div class="mb-6">
-					{#if confirmAction === 'return'}
+					{#if confirmAction === 'use'}
 						<p class="text-gray-700">
-							Apakah Anda yakin ingin menandai <strong>{selectedItem?.nama}</strong> sebagai dikembalikan?
-						</p>
-					{:else if confirmAction === 'undo'}
-						<p class="text-gray-700">
-							Apakah Anda yakin ingin membatalkan pengembalian <strong>{selectedItem?.nama}</strong>?
+							Apakah Anda yakin ingin menandai <strong>{selectedItem?.nama}</strong> sebagai sudah digunakan?
 						</p>
 					{/if}
 				</div>
@@ -1108,48 +898,6 @@
 					>
 						Ya, Lanjutkan
 					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Modal Detail Pengembalian -->
-	{#if showDetailModal && detailItem}
-		<div class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-			<div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-				<div class="p-6">
-					<div class="flex items-center justify-between mb-4">
-						<h3 class="text-lg font-semibold text-gray-900">Detail Pengembalian</h3>
-						<button
-							on:click={closeDetailModal}
-							class="text-gray-400 hover:text-gray-600 transition-colors"
-						>
-							<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-							</svg>
-						</button>
-					</div>
-					<div class="space-y-4">
-						<div class="grid grid-cols-2 gap-4">
-							<div>
-								<label class="block text-sm font-medium text-gray-700 mb-1">Nama Barang</label>
-								<div class="p-3 bg-gray-50 rounded-lg">{detailItem.nama}</div>
-							</div>
-							<div>
-								<label class="block text-sm font-medium text-gray-700 mb-1">Peminjam</label>
-								<div class="p-3 bg-gray-50 rounded-lg">{detailItem.peminjam}</div>
-							</div>
-						</div>
-						<!-- Add more detail fields as needed -->
-					</div>
-					<div class="mt-6 flex justify-end">
-						<button
-							on:click={closeDetailModal}
-							class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-						>
-							Tutup
-						</button>
-					</div>
 				</div>
 			</div>
 		</div>

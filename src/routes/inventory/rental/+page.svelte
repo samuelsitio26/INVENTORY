@@ -492,17 +492,32 @@
 	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
 		<div>
 			<h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">
-				Procurement Peminjaman Barang
+				Manajemen Inventory
 			</h1>
-			<p class="mt-1 text-sm text-gray-500">Status procurement dan persetujuan peminjaman alat</p>
+			<p class="mt-1 text-sm text-gray-500">Kelola peminjaman barang dan consumable inventory</p>
 		</div>
 		<div class="flex gap-2 mt-4 sm:mt-0">
 			<button
-				class="px-5 py-3 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors shadow"
-				>Aksi Peminjaman</button
+				on:click={() => goto('/inventory/consumable')}
+				class="px-5 py-3 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 transition-colors shadow flex items-center gap-2"
 			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+				</svg>
+				Consumable
+			</button>
 			<button
-				class="px-5 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow"
+				on:click={() => goto('/inventory/peminjaman')}
+				class="px-5 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow flex items-center gap-2"
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+				</svg>
+				Peminjaman Barang
+			</button>
+			<button
+				on:click={() => location.reload()}
+				class="px-5 py-3 bg-gray-600 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors shadow"
 				>Refresh</button
 			>
 		</div>

@@ -7,7 +7,6 @@
 	export let spkNotifications = [];
 	export let productionRequests = [];
 	export let productionNotifications = [];
-	export let soCustomerData = [];
 
 	let open = false;
 	const dispatch = createEventDispatcher();
@@ -29,8 +28,6 @@
 				tab = 'approval';
 			} else if (reminders.length > 0) {
 				tab = 'reminder';
-			} else if (soCustomerData.length > 0) {
-				tab = 'so';
 			}
 			hasSetInitialTab = true;
 		}
@@ -40,12 +37,7 @@
 	// Reactive statement for debugging
 	$: {
 		console.log('NotificationBell - Production notifications:', productionNotifications);
-		console.log(
-			'NotificationBell - Production notifications length:',
-			productionNotifications.length
-		);
-		console.log('NotificationBell - SO Customer data:', soCustomerData);
-		console.log('NotificationBell - SO Customer data length:', soCustomerData.length);
+		console.log('NotificationBell - Production notifications length:', productionNotifications.length);
 	}
 
 	function handleClickOutside(event) {
@@ -97,16 +89,11 @@
 				d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
 			/>
 		</svg>
-		{#if reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length + productionNotifications.length + soCustomerData.length > 0}
+		{#if reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length + productionNotifications.length > 0}
 			<span
 				class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold animate-pulse"
 			>
-				{reminders.length +
-					lateItems.length +
-					waitingApprovalItems.length +
-					spkNotifications.length +
-					productionNotifications.length +
-					soCustomerData.length}
+				{reminders.length + lateItems.length + waitingApprovalItems.length + spkNotifications.length + productionNotifications.length}
 			</span>
 		{/if}
 	</button>
@@ -141,9 +128,9 @@
 					>
 					<button
 						class="flex-1 py-3 text-sm font-bold border-b-2"
-						class:text-blue-600={tab === 'so'}
-						class:border-b-blue-600={tab === 'so'}
-						on:click={() => (tab = 'so')}>SO Customer</button
+						class:text-blue-600={tab === 'reminder'}
+						class:border-b-blue-600={tab === 'reminder'}
+						on:click={() => (tab = 'reminder')}>Jatuh Tempo</button
 					>
 				</div>
 				<div class="p-4 max-h-80 overflow-y-auto">
@@ -159,25 +146,22 @@
 										SPK: {notification.spk_nomor} | {notification.nama_formula}
 									</div>
 									<div class="text-xs text-gray-500">
-										Jumlah: {notification.jumlah_produksi}
-										{notification.unit}
+										Jumlah: {notification.jumlah_produksi} {notification.unit}
 									</div>
 									<div class="flex space-x-2 mt-2">
 										<button
-											on:click={() =>
-												handleSPKAction(notification.id, notification.spk_id, 'approve')}
+											on:click={() => handleSPKAction(notification.id, notification.spk_id, 'approve')}
 											class="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
 										>
 											Approve
 										</button>
 										<button
-											on:click={() =>
-												handleSPKAction(notification.id, notification.spk_id, 'reject')}
+											on:click={() => handleSPKAction(notification.id, notification.spk_id, 'reject')}
 											class="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
 										>
 											Reject
 										</button>
-										<a
+										<a 
 											href="/inventory/spk-notifications/{notification.id}"
 											class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
 										>
@@ -199,26 +183,22 @@
 										Status: {item.status} | Stok: {item.sisa_stok}
 									</div>
 									<div class="text-xs text-gray-500">
-										Priority:
+										Priority: 
 										{#if item.priority === 'urgent'}
 											<span class="px-1 py-0.5 rounded text-white text-xs bg-red-500">URGENT</span>
 										{:else if item.priority === 'high'}
 											<span class="px-1 py-0.5 rounded text-white text-xs bg-orange-500">HIGH</span>
 										{:else}
-											<span class="px-1 py-0.5 rounded text-white text-xs bg-yellow-500"
-												>MEDIUM</span
-											>
+											<span class="px-1 py-0.5 rounded text-white text-xs bg-yellow-500">MEDIUM</span>
 										{/if}
 									</div>
 									{#if item.source === 'manual'}
 										<div class="text-xs text-purple-600 mt-1">
-											📋 Permintaan diajukan: {new Date(item.tanggal_request).toLocaleDateString(
-												'id-ID'
-											)}
+											📋 Permintaan diajukan: {new Date(item.tanggal_request).toLocaleDateString('id-ID')}
 										</div>
 									{/if}
 									<div class="flex space-x-2 mt-2">
-										<a
+										<a 
 											href="/inventory/produksi-notifications"
 											class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
 										>
@@ -229,7 +209,7 @@
 							{/each}
 							{#if productionNotifications.length > 5}
 								<div class="text-center mt-2">
-									<a
+									<a 
 										href="/inventory/produksi-notifications"
 										class="text-xs text-blue-600 hover:text-blue-800"
 									>
@@ -275,45 +255,6 @@
 									<div class="font-semibold text-blue-700">{item.nama}</div>
 									<div class="text-xs text-gray-500">Peminjam: {item.peminjam}</div>
 									<div class="text-xs text-blue-700">Jatuh tempo: {item.tanggalJatuhTempo}</div>
-								</div>
-							{/each}
-						{/if}
-					{:else if tab === 'so'}
-						{#if soCustomerData.length === 0}
-							<div class="text-gray-400 text-sm text-center">Tidak ada SO Customer</div>
-						{:else}
-							{#each soCustomerData as so}
-								<div class="mb-3 p-3 rounded bg-indigo-50 border border-indigo-100">
-									<div class="font-semibold text-indigo-700">{so.nomor_so}</div>
-									<div class="text-xs text-gray-500">Customer: {so.company_name}</div>
-									{#if so.nomor_po_customer}
-										<div class="text-xs text-gray-500">PO Customer: {so.nomor_po_customer}</div>
-									{/if}
-									<div class="text-xs text-indigo-700">
-										Tanggal SO: {new Date(so.tanggal_so).toLocaleDateString('id-ID')}
-									</div>
-									{#if so.tanggal_kirim}
-										<div class="text-xs text-indigo-700">
-											Tanggal Kirim: {new Date(so.tanggal_kirim).toLocaleDateString('id-ID')}
-										</div>
-									{:else}
-										<div class="text-xs text-gray-500">Tanggal Kirim: Belum ditentukan</div>
-									{/if}
-									<div class="text-xs text-gray-600">Sales: {so.sales_name} ({so.sales_code})</div>
-									<div class="text-xs font-medium text-indigo-800">
-										Total: {new Intl.NumberFormat('id-ID', {
-											style: 'currency',
-											currency: 'IDR'
-										}).format(so.grand_total)}
-									</div>
-									{#if so.details && so.details.length > 0}
-										<div class="text-xs text-gray-500 mt-1">
-											Items: {so.details.length} produk
-										</div>
-									{/if}
-									{#if so.notes}
-										<div class="text-xs text-gray-500 mt-1 italic">Note: {so.notes}</div>
-									{/if}
 								</div>
 							{/each}
 						{/if}
