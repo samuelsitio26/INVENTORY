@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import StatusBadge from '$lib/components/common/StatusBadge.svelte';
 	import { createSuratJalan, generateNomorSJ, getSuratJalan } from '$lib/services/suratjalan.js';
+	import { getCustomerOptions, getCustomerByKode } from '$lib/services/customer.js';
+	import { getGudang } from '$lib/services/gudang.js';
 	import { jsPDF } from 'jspdf';
 	import 'jspdf-autotable';
 	import { addProductionRequest } from '$lib/stores/notifications.js';
@@ -23,6 +25,7 @@
 	// Filter dan search
 	let searchTerm = '';
 	let statusFilter = 'all';
+	let gudangFilter = 'all';
 	
 	// Form state
 	let showAddForm = false;
@@ -39,7 +42,8 @@
 		nama_produk_group: '',
 		kode_formula: '',
 		nama_formula: '',
-		sisa_stok: ''
+		sisa_stok: '',
+		kode_gudang: ''
 	};
 	let saving = false;
 	
@@ -47,17 +51,23 @@
 	let showEditForm = false;
 	let editFormData = { ...formData };
 
+	// Gudang state
+	let gudangList = [];
+	let showGudangTable = false;
+
 	// State for SJ form
 	let showSJForm = false;
 	let showSJList = false;
 	let suratJalanList = [];
 	let rawMaterials = []; // This would be populated from API
+	let customerOptions = []; // Customer options for dropdown
 	
 	// State for Production Request Modal
 	let showProductionRequestModal = false;
 	let productionRequestItems = [];
 	let sjFormData = {
 		kode_customer: '',
+		nama_customer: '', // Tambahan field untuk nama customer
 		kode_sales: '',
 		nomor_po_customer: '',
 		tanggal_po_customer: new Date().toISOString().split('T')[0],
@@ -97,6 +107,8 @@
 			checkLowStockItems();
 		});
 		loadRawMaterials();
+		loadCustomerOptions();
+		loadGudangList();
 	});
 
 	async function loadFinishedGoods() {
@@ -221,12 +233,13 @@
 			kode_produk: '',
 			nama_produk: '',
 			kode_warna: '',
-		warna: '',
+			warna: '',
 			produk_group: '',
 			nama_produk_group: '',
 			kode_formula: '',
 			nama_formula: '',
-			sisa_stok: ''
+			sisa_stok: '',
+			kode_gudang: ''
 		};
 	}
 
@@ -246,7 +259,9 @@
 			
 			const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
 			
-			return matchesSearch && matchesStatus;
+			const matchesGudang = gudangFilter === 'all' || item.kode_gudang === gudangFilter;
+			
+			return matchesSearch && matchesStatus && matchesGudang;
 		});
 		
 		totalItems = filteredFinishedGoods.length;
@@ -286,6 +301,8 @@
 			});
 
 			if (!response.ok) {
+				const errorData = await response.text();
+				console.error('Update failed with response:', errorData);
 				throw new Error('Failed to update finished good');
 			}
 
@@ -454,6 +471,12 @@
 		}
 	}
 
+	$: {
+		if (searchTerm !== undefined || statusFilter !== undefined || gudangFilter !== undefined) {
+			handleSearch();
+		}
+	}
+
 	$: totalPages = Math.ceil(totalItems / itemsPerPage);
 	$: startItem = (currentPage - 1) * itemsPerPage + 1;
 	$: endItem = Math.min(currentPage * itemsPerPage, totalItems);
@@ -475,6 +498,70 @@
 			rawMaterials = data.data;
 		} catch (err) {
 			console.error('Load Raw Materials Error:', err);
+		}
+	}
+
+	// Load customer options
+	async function loadCustomerOptions() {
+		try {
+			customerOptions = await getCustomerOptions();
+			console.log('Customer options loaded:', customerOptions.length);
+		} catch (error) {
+			console.error('Error loading customer options:', error);
+			customerOptions = [];
+		}
+	}
+
+	// Function to load gudang data
+	async function loadGudangList() {
+		try {
+			gudangList = await getGudang();
+			console.log('Gudang data loaded:', gudangList.length);
+		} catch (error) {
+			console.error('Error loading gudang data:', error);
+			gudangList = [];
+			showToast('Gagal memuat data gudang', 'error');
+		}
+	}
+
+	// Functions to show/hide gudang table
+	function showGudangTableModal() {
+		showGudangTable = true;
+	}
+
+	function closeGudangTable() {
+		showGudangTable = false;
+	}
+
+	// Function to get warehouse name by code
+	function getGudangName(kodeGudang) {
+		if (!kodeGudang) return '-';
+		if (!gudangList || gudangList.length === 0) {
+			return kodeGudang || '-'; // Return code if name not available
+		}
+		const gudang = gudangList.find(g => g.kode_gudang === kodeGudang);
+		return gudang ? gudang.nama_gudang : (kodeGudang || '-');
+	}
+
+	// Function to handle customer selection
+	async function handleCustomerChange(event) {
+		const selectedKode = event.target.value;
+		sjFormData.kode_customer = selectedKode;
+		
+		if (selectedKode) {
+			try {
+				const customer = await getCustomerByKode(selectedKode);
+				if (customer) {
+					sjFormData.nama_customer = customer.nama_sj_fp || '';
+				} else {
+					sjFormData.nama_customer = '';
+				}
+			} catch (error) {
+				console.error('Error getting customer details:', error);
+				sjFormData.nama_customer = '';
+			}
+		} else {
+			sjFormData.nama_customer = '';
 		}
 	}
 
@@ -641,6 +728,7 @@
 				
 				const suratJalanData = {
 					kode_customer: sjFormData.kode_customer,
+					nama_customer: sjFormData.nama_customer, // Tambah nama customer
 					kode_sales: sjFormData.kode_sales,
 					no_po: sjFormData.nomor_po_customer,
 					tgl_po: sjFormData.tanggal_po_customer,
@@ -779,6 +867,7 @@
 		// Reset form data
 		sjFormData = {
 			kode_customer: '',
+			nama_customer: '', // Reset nama customer
 			kode_sales: '',
 			nomor_po_customer: '',
 			tanggal_po_customer: new Date().toISOString().split('T')[0],
@@ -870,7 +959,7 @@
 			doc.setFontSize(10);
 			doc.text('Kepada Yth.', 14, 55);
 			doc.text(`${sjData.kode_customer || '-'}`, 14, 62);
-			doc.text('PT. MOWILEX INDONESIA', 14, 68);
+			doc.text(`${sjData.nama_customer || 'PT. MOWILEX INDONESIA'}`, 14, 68);
 			doc.text('Jl. Daan Mogot Raya KM. 10 No. 2A RT.001/008, Kedaung-Kaliangke Cengkareng -', 14, 74);
 			doc.text('Jakarta Barat, 11710', 14, 80);
 			doc.text('Telp: 021 - 5406663, 5451292, 619187', 14, 86);
@@ -1038,7 +1127,7 @@
 				// Footer section
 				const footerY = finalY + 25;
 				doc.setFont('helvetica', 'normal');
-				doc.text(`Kirim ke : ${sjData.kode_customer || 'Jl. Daan Mogot Raya KM. 10 No. 2A RT.001/008, Kedaung-Kaliangke'}`, 14, footerY);
+				doc.text(`Kirim ke : ${sjData.nama_customer || sjData.kode_customer || 'Jl. Daan Mogot Raya KM. 10 No. 2A RT.001/008, Kedaung-Kaliangke'}`, 14, footerY);
 
 				doc.text('NB.', 14, footerY + 15);
 				doc.text('KIRIM KE CUSTOMER', 30, footerY + 15);
@@ -1094,7 +1183,7 @@
 				// Footer section
 				const footerY = currentY + 25;
 				doc.setFont('helvetica', 'normal');
-				doc.text(`Kirim ke : ${sjData.kode_customer || 'Jl. Daan Mogot Raya KM. 10 No. 2A RT.001/008, Kedaung-Kaliangke'}`, 14, footerY);
+				doc.text(`Kirim ke : ${sjData.nama_customer || sjData.kode_customer || 'Jl. Daan Mogot Raya KM. 10 No. 2A RT.001/008, Kedaung-Kaliangke'}`, 14, footerY);
 
 				doc.text('NB.', 14, footerY + 15);
 				doc.text('KIRIM KE CUSTOMER', 30, footerY + 15);
@@ -1156,6 +1245,7 @@
 				nomor_sj: sjFormData.nomor_sj,
 				tgl_sj: sjFormData.tanggal_sj,
 				kode_customer: sjFormData.kode_customer,
+				nama_customer: sjFormData.nama_customer, // Tambah nama customer
 				nama_sopir: sjFormData.nama_sopir,
 				no_kendaraan: sjFormData.no_kendaraan,
 				no_po: sjFormData.nomor_po_customer,
@@ -1219,6 +1309,13 @@
 			>
 				Lihat Barang Perlu Restock
 			</button>
+
+			<!-- <button
+				class="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+				on:click={showGudangTableModal}
+			>
+				Lihat Gudang
+			</button> -->
 		</div>
 	</div>
 
@@ -1406,6 +1503,21 @@
 									placeholder="0"
 								/>
 							</div>
+
+							<div class="md:col-span-2">
+								<label for="kode_gudang" class="block text-sm font-medium text-gray-700 mb-1">Gudang *</label>
+								<select
+									id="kode_gudang"
+									bind:value={formData.kode_gudang}
+									required
+									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+								>
+									<option value="">Pilih Gudang</option>
+									{#each gudangList as gudang}
+										<option value={gudang.kode_gudang}>{gudang.kode_gudang} - {gudang.nama_gudang}</option>
+									{/each}
+								</select>
+							</div>
 						</div>
 						
 						<div class="flex justify-end gap-3">
@@ -1587,6 +1699,21 @@
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 								/>
 							</div>
+							
+							<div class="md:col-span-2">
+								<label for="edit_kode_gudang" class="block text-sm font-medium text-gray-700 mb-1">Gudang *</label>
+								<select
+									id="edit_kode_gudang"
+									bind:value={editFormData.kode_gudang}
+									required
+									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+								>
+									<option value="">Pilih Gudang</option>
+									{#each gudangList as gudang}
+										<option value={gudang.kode_gudang}>{gudang.kode_gudang} - {gudang.nama_gudang}</option>
+									{/each}
+								</select>
+							</div>
 						</div>
 
 						<div class="flex justify-end gap-3">
@@ -1631,13 +1758,29 @@
 							<!-- Customer & Sales Info -->
 							<div>
 								<label for="kode_customer" class="block text-sm font-medium text-gray-700 mb-1">Kode Customer *</label>
-								<input
+								<select
 									id="kode_customer"
-									type="text"
 									bind:value={sjFormData.kode_customer}
+									on:change={handleCustomerChange}
 									required
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-									placeholder="Masukkan kode customer"
+								>
+									<option value="">Pilih Customer</option>
+									{#each customerOptions as customer}
+										<option value={customer.kode}>{customer.kode} - {customer.nama}</option>
+									{/each}
+								</select>
+							</div>
+
+							<div>
+								<label for="nama_customer" class="block text-sm font-medium text-gray-700 mb-1">Nama Customer</label>
+								<input
+									id="nama_customer"
+									type="text"
+									bind:value={sjFormData.nama_customer}
+									readonly
+									class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600"
+									placeholder="Nama customer akan terisi otomatis"
 								/>
 							</div>
 							
@@ -1777,6 +1920,7 @@
 							<div>
 								<label for="due_date" class="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
 								<input
+								
 									id="due_date"
 									type="date"
 									bind:value={sjFormData.due_date}
@@ -2012,30 +2156,55 @@
 	{/if}
 
 	<!-- Filters -->
-	<div class="bg-white rounded-lg shadow p-4 mb-6">
-		<div class="flex flex-wrap gap-4 items-center">
-			<div class="flex-1 min-w-64">
-				<label for="search-input" class="block text-sm font-medium text-gray-700 mb-1">Search</label>
+	<div class="bg-white rounded-lg shadow p-3 mb-6">
+		<div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+			<div>
+				<label for="search-input" class="block text-xs font-medium text-gray-700 mb-1">Search</label>
 				<input
 					id="search-input"
 					type="text"
 					bind:value={searchTerm}
-					placeholder="Cari berdasarkan nama, kode barang, produk, atau warna..."
-					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+					placeholder="Cari nama, kode barang..."
+					class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 				/>
 			</div>
-			<div class="min-w-48">
-				<label for="status-filter" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+			<div>
+				<label for="status-filter" class="block text-xs font-medium text-gray-700 mb-1">Status</label>
 				<select
 					id="status-filter"
 					bind:value={statusFilter}
-					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+					class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
 				>
 					<option value="all">Semua Status</option>
 					<option value="Ready">Ready</option>
 					<option value="Low Stock">Low Stock</option>
 					<option value="Out of Stock">Out of Stock</option>
 				</select>
+			</div>
+			<div>
+				<label for="gudang-filter" class="block text-xs font-medium text-gray-700 mb-1">Gudang</label>
+				<select
+					id="gudang-filter"
+					bind:value={gudangFilter}
+					class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+				>
+					<option value="all">Semua Gudang</option>
+					{#each gudangList as gudang}
+						<option value={gudang.kode_gudang}>{gudang.nama_gudang}</option>
+					{/each}
+				</select>
+			</div>
+			<div>
+				<button
+					on:click={() => {
+						searchTerm = '';
+						statusFilter = 'all';
+						gudangFilter = 'all';
+					}}
+					class="w-full px-3 py-2 text-sm bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+				>
+					Reset Filter
+				</button>
 			</div>
 		</div>
 	</div>
@@ -2044,19 +2213,20 @@
 	<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
 		<div class="bg-white p-4 rounded-lg shadow">
 			<div class="text-sm text-gray-600">Total Produk</div>
-			<div class="text-2xl font-bold text-gray-900">{finishedGoods.length}</div>
+			<div class="text-2xl font-bold text-gray-900">{filteredFinishedGoods.length}</div>
+			<div class="text-xs text-gray-500 mt-1">dari {finishedGoods.length} total</div>
 		</div>
 		<div class="bg-white p-4 rounded-lg shadow">
 			<div class="text-sm text-gray-600">Ready</div>
-			<div class="text-2xl font-bold text-green-600">{finishedGoods.filter(item => item.status === 'Ready').length}</div>
+			<div class="text-2xl font-bold text-green-600">{filteredFinishedGoods.filter(item => item.status === 'Ready').length}</div>
 		</div>
 		<div class="bg-white p-4 rounded-lg shadow">
 			<div class="text-sm text-gray-600">Low Stock</div>
-			<div class="text-2xl font-bold text-yellow-600">{finishedGoods.filter(item => item.status === 'Low Stock').length}</div>
+			<div class="text-2xl font-bold text-yellow-600">{filteredFinishedGoods.filter(item => item.status === 'Low Stock').length}</div>
 		</div>
 		<div class="bg-white p-4 rounded-lg shadow">
 			<div class="text-sm text-gray-600">Out of Stock</div>
-			<div class="text-2xl font-bold text-red-600">{finishedGoods.filter(item => item.status === 'Out of Stock').length}</div>
+			<div class="text-2xl font-bold text-red-600">{filteredFinishedGoods.filter(item => item.status === 'Out of Stock').length}</div>
 		</div>
 	</div>
 
@@ -2095,6 +2265,7 @@
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kode Formula</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Formula</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sisa Stok</th>
+							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gudang</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
 						</tr>
@@ -2120,6 +2291,7 @@
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.kode_formula}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.nama_formula}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.sisa_stok}</td>
+								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{getGudangName(item.kode_gudang)}</td>
 								<td class="px-4 py-4 whitespace-nowrap">
 									<StatusBadge status={item.status} />
 								</td>
@@ -2345,6 +2517,7 @@
 									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Barang</th>
 									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Warna</th>
 									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sisa Stok</th>
+									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gudang</th>
 									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
 									<th class="px-4 py-3 border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Formula</th>
 								</tr>
@@ -2415,6 +2588,82 @@
 						>
 							Kirim Permintaan
 						</button>
+					{/if}
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Gudang Table Modal -->
+	{#if showGudangTable}
+		<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+			<div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+				<div class="p-6">
+					<div class="flex justify-between items-center mb-6">
+						<h2 class="text-xl font-bold text-gray-900">Daftar Gudang</h2>
+						<button
+							on:click={closeGudangTable}
+							class="text-gray-400 hover:text-gray-600 focus:outline-none"
+						>
+							✕
+						</button>
+					</div>
+
+					{#if gudangList.length === 0}
+						<div class="text-center py-8">
+							<div class="text-gray-500 mb-4">
+								<svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+								</svg>
+							</div>
+							<p class="text-lg font-medium text-gray-500">Tidak ada data gudang</p>
+							<p class="text-sm text-gray-400 mt-1">Data gudang akan ditampilkan di sini setelah tersedia</p>
+						</div>
+					{:else}
+						<div class="overflow-x-auto">
+							<table class="min-w-full divide-y divide-gray-200">
+								<thead class="bg-gray-50">
+									<tr>
+										<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+											Kode Gudang
+										</th>
+										<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+											Nama Gudang
+										</th>
+										<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+											Tanggal Dibuat
+										</th>
+									</tr>
+								</thead>
+								<tbody class="bg-white divide-y divide-gray-200">
+									{#each gudangList as gudang}
+										<tr class="hover:bg-gray-50">
+											<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+												{gudang.kode_gudang}
+											</td>
+											<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+												{gudang.nama_gudang}
+											</td>
+											<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+												{new Date(gudang.date_created).toLocaleDateString('id-ID')}
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+
+						<div class="mt-6 flex justify-between items-center">
+							<div class="text-sm text-gray-700">
+								Menampilkan {gudangList.length} gudang
+							</div>
+							<button
+								on:click={closeGudangTable}
+								class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
+							>
+								Tutup
+							</button>
+						</div>
 					{/if}
 				</div>
 			</div>

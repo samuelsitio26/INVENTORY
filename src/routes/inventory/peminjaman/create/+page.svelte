@@ -3,57 +3,78 @@
 	import { onMount, onDestroy } from 'svelte';
 
 	let form = {
-		itemId: '',
-		name: '',
 		borrower: '',
 		borrowDate: new Date().toISOString().split('T')[0],
 		duration: 1,
-		qty: ''
+		items: [{
+			itemId: '',
+			name: '',
+			qty: '',
+			selectedItem: null,
+			qtyError: '',
+			showDropdown: false
+		}]
 	};
 
 	let items = [];
 	let filteredItems = [];
-	let selectedItem = null;
 	let loading = false;
 	let error = null;
-	let qtyError = '';
-	let showDropdown = false;
-	let dropdownRef;
+	let dropdownRefs = [];
 
-	function filterItems() {
-		if (!form.name) {
+	function filterItems(index, searchTerm) {
+		if (!searchTerm) {
 			filteredItems = items;
 			return;
 		}
 		filteredItems = items.filter(
 			(item) =>
-				item.name.toLowerCase().includes(form.name.toLowerCase()) ||
-				item.category.toLowerCase().includes(form.name.toLowerCase()) ||
-				item.subCategory.toLowerCase().includes(form.name.toLowerCase())
+				item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+				item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+				item.subCategory.toLowerCase().includes(searchTerm.toLowerCase())
 		);
 	}
 
-	function selectItem(item) {
-		selectedItem = item;
-		form.itemId = item.id;
-		form.name = item.name;
-		showDropdown = false;
-		qtyError = '';
+	function selectItem(formIndex, item) {
+		form.items[formIndex].selectedItem = item;
+		form.items[formIndex].itemId = item.id;
+		form.items[formIndex].name = item.name;
+		form.items[formIndex].showDropdown = false;
+		form.items[formIndex].qtyError = '';
 	}
 
-	function validateQty() {
-		if (!selectedItem) return true;
-		const qty = Number(form.qty);
+	function validateQty(index) {
+		const formItem = form.items[index];
+		if (!formItem.selectedItem) return true;
+		
+		const qty = Number(formItem.qty);
 		if (qty <= 0) {
-			qtyError = 'Jumlah harus lebih dari 0';
+			formItem.qtyError = 'Jumlah harus lebih dari 0';
 			return false;
 		}
-		if (qty > selectedItem.stockIn) {
-			qtyError = `Jumlah tidak boleh melebihi stok yang tersedia (${selectedItem.stockIn})`;
+		if (qty > formItem.selectedItem.stockIn) {
+			formItem.qtyError = `Jumlah tidak boleh melebihi stok yang tersedia (${formItem.selectedItem.stockIn})`;
 			return false;
 		}
-		qtyError = '';
+		formItem.qtyError = '';
 		return true;
+	}
+
+	function addItem() {
+		form.items = [...form.items, {
+			itemId: '',
+			name: '',
+			qty: '',
+			selectedItem: null,
+			qtyError: '',
+			showDropdown: false
+		}];
+	}
+
+	function removeItem(index) {
+		if (form.items.length > 1) {
+			form.items = form.items.filter((_, i) => i !== index);
+		}
 	}
 
 	async function loadData() {
@@ -88,48 +109,71 @@
 	}
 
 	async function handleSubmit() {
-		if (selectedItem && !validateQty()) {
+		// Validate all items
+		let hasErrors = false;
+		for (let i = 0; i < form.items.length; i++) {
+			if (!validateQty(i)) {
+				hasErrors = true;
+			}
+		}
+		
+		if (hasErrors) {
 			return;
 		}
+
+		// Check if all items are selected
+		const invalidItems = form.items.filter(item => !item.selectedItem || !item.qty);
+		if (invalidItems.length > 0) {
+			alert('Harap lengkapi semua barang dan jumlahnya');
+			return;
+		}
+
 		try {
-			const payload = {
-				barang_id: form.itemId,
-				borrower: form.borrower,
-				borrow_date: form.borrowDate,
-				duration: parseInt(form.duration),
-				qty: Number(form.qty),
-				returned: false
-			};
-			console.log('Payload yang dikirim:', payload);
-			const response = await fetch('https://directus.eltamaprimaindo.com/items/rentals', {
-				method: 'POST',
-				headers: {
-					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify(payload)
+			// Create multiple rental records
+			const rentalPromises = form.items.map(formItem => {
+				const payload = {
+					barang_id: formItem.itemId,
+					borrower: form.borrower,
+					borrow_date: form.borrowDate,
+					duration: parseInt(form.duration),
+					qty: Number(formItem.qty),
+					returned: false
+				};
+				
+				return fetch('https://directus.eltamaprimaindo.com/items/rentals', {
+					method: 'POST',
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify(payload)
+				});
 			});
-			if (!response.ok) {
-				let errorText;
-				try {
-					errorText = await response.text();
-					console.error('Response error:', errorText);
-				} catch (e) {
-					errorText = 'Unknown error';
-				}
-				throw new Error('Gagal meminjam: ' + errorText);
+
+			const responses = await Promise.all(rentalPromises);
+			
+			// Check if all requests were successful
+			const failedResponses = responses.filter(response => !response.ok);
+			if (failedResponses.length > 0) {
+				throw new Error('Gagal menyimpan beberapa item peminjaman');
 			}
-			alert('Barang berhasil dipinjam!');
-			// PATCH stok barang setelah berhasil pinjam
-			const newStock = selectedItem.stockIn - Number(form.qty);
-			await fetch(`https://directus.eltamaprimaindo.com/items/Barang/${form.itemId}`, {
-				method: 'PATCH',
-				headers: {
-					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ StokIn: newStock })
+
+			// Update stock for all items
+			const stockUpdatePromises = form.items.map(formItem => {
+				const newStock = formItem.selectedItem.stockIn - Number(formItem.qty);
+				return fetch(`https://directus.eltamaprimaindo.com/items/Barang/${formItem.itemId}`, {
+					method: 'PATCH',
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({ StokIn: newStock })
+				});
 			});
+
+			await Promise.all(stockUpdatePromises);
+			
+			alert(`${form.items.length} barang berhasil dipinjam!`);
 			await new Promise((resolve) => setTimeout(resolve, 1000));
 			await loadData();
 			resetForm();
@@ -142,21 +186,26 @@
 
 	function resetForm() {
 		form = {
-			itemId: '',
-			name: '',
 			borrower: '',
 			borrowDate: new Date().toISOString().split('T')[0],
 			duration: 1,
-			qty: ''
+			items: [{
+				itemId: '',
+				name: '',
+				qty: '',
+				selectedItem: null,
+				qtyError: '',
+				showDropdown: false
+			}]
 		};
-		selectedItem = null;
-		qtyError = '';
 	}
 
 	function handleClickOutside(event) {
-		if (dropdownRef && !dropdownRef.contains(event.target)) {
-			showDropdown = false;
-		}
+		form.items.forEach((item, index) => {
+			if (dropdownRefs[index] && !dropdownRefs[index].contains(event.target)) {
+				item.showDropdown = false;
+			}
+		});
 	}
 
 	onMount(() => {
@@ -167,6 +216,13 @@
 	onDestroy(() => {
 		window.removeEventListener('mousedown', handleClickOutside);
 	});
+
+	// Reactive statement to update dropdownRefs array
+	$: {
+		if (dropdownRefs.length !== form.items.length) {
+			dropdownRefs = new Array(form.items.length).fill(null);
+		}
+	}
 
 	// Ubah format returnDate menjadi mm-dd-yyyy
 	function formatDateMDY(dateStr) {
@@ -213,51 +269,7 @@
 
 	<div class="bg-white rounded-lg shadow-lg p-6">
 		<form on:submit|preventDefault={handleSubmit}>
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-				<!-- Pilih Barang -->
-				<div class="md:col-span-2">
-					<label for="nama-barang" class="block text-sm font-medium text-gray-700 mb-2">
-						Nama Barang *
-					</label>
-					<div class="relative" bind:this={dropdownRef}>
-						<input
-							type="text"
-							bind:value={form.name}
-							on:input={filterItems}
-							on:focus={() => (showDropdown = true)}
-							placeholder="Ketik untuk mencari barang..."
-							class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-							required
-						/>
-						{#if showDropdown && filteredItems.length > 0}
-							<div
-								class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto"
-							>
-								{#each filteredItems as item}
-									<button
-										type="button"
-										on:click={() => selectItem(item)}
-										class="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-									>
-										<div class="font-medium text-gray-900">{item.name}</div>
-										<div class="text-sm text-gray-500">
-											{item.category} - {item.subCategory} (Stok: {item.stockIn})
-										</div>
-									</button>
-								{/each}
-							</div>
-						{/if}
-					</div>
-					{#if selectedItem}
-						<div class="mt-2 p-3 bg-blue-50 rounded-lg">
-							<p class="text-sm text-blue-800">
-								<strong>Dipilih:</strong>
-								{selectedItem.name} (Stok tersedia: {selectedItem.stockIn})
-							</p>
-						</div>
-					{/if}
-				</div>
-
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
 				<!-- Nama Peminjam -->
 				<div>
 					<label for="peminjam" class="block text-sm font-medium text-gray-700 mb-2">
@@ -302,26 +314,109 @@
 						Tanggal Pengembalian: <b>{returnDate}</b>
 					</div>
 				</div>
+			</div>
 
-				<!-- Jumlah Pinjam -->
-				<div>
-					<label for="qty" class="block text-sm font-medium text-gray-700 mb-2">
-						Jumlah Pinjam *
-					</label>
-					<input
-						type="number"
-						bind:value={form.qty}
-						on:input={validateQty}
-						min="1"
-						max={selectedItem?.stockIn || 999}
-						placeholder="Jumlah barang"
-						class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-						required
-					/>
-					{#if qtyError}
-						<p class="text-red-600 text-sm mt-1">{qtyError}</p>
-					{/if}
+			<!-- Daftar Barang -->
+			<div class="mb-6">
+				<div class="flex justify-between items-center mb-4">
+					<h3 class="text-lg font-semibold text-gray-900">Daftar Barang yang Dipinjam</h3>
+					<button
+						type="button"
+						on:click={addItem}
+						class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+					>
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+						</svg>
+						Tambah Barang
+					</button>
 				</div>
+
+				{#each form.items as formItem, index}
+					<div class="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50">
+						<div class="flex justify-between items-start mb-4">
+							<h4 class="font-medium text-gray-900">Barang #{index + 1}</h4>
+							{#if form.items.length > 1}
+								<button
+									type="button"
+									on:click={() => removeItem(index)}
+									class="text-red-600 hover:text-red-800 p-1"
+									title="Hapus barang"
+								>
+									<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+									</svg>
+								</button>
+							{/if}
+						</div>
+
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<!-- Pilih Barang -->
+							<div>
+								<label class="block text-sm font-medium text-gray-700 mb-2">
+									Nama Barang *
+								</label>
+								<div class="relative" bind:this={dropdownRefs[index]}>
+									<input
+										type="text"
+										bind:value={formItem.name}
+										on:input={() => filterItems(index, formItem.name)}
+										on:focus={() => (formItem.showDropdown = true)}
+										placeholder="Ketik untuk mencari barang..."
+										class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+										required
+									/>
+									{#if formItem.showDropdown && filteredItems.length > 0}
+										<div
+											class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+										>
+											{#each filteredItems as item}
+												<button
+													type="button"
+													on:click={() => selectItem(index, item)}
+													class="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+												>
+													<div class="font-medium text-gray-900">{item.name}</div>
+													<div class="text-sm text-gray-500">
+														{item.category} - {item.subCategory} (Stok: {item.stockIn})
+													</div>
+												</button>
+											{/each}
+										</div>
+									{/if}
+								</div>
+								{#if formItem.selectedItem}
+									<div class="mt-2 p-2 bg-blue-50 rounded-lg">
+										<p class="text-sm text-blue-800">
+											<strong>Dipilih:</strong>
+											{formItem.selectedItem.name} (Stok tersedia: {formItem.selectedItem.stockIn})
+										</p>
+									</div>
+								{/if}
+							</div>
+
+							<!-- Jumlah Pinjam -->
+							<div>
+								<label class="block text-sm font-medium text-gray-700 mb-2">
+									Jumlah Pinjam *
+								</label>
+								<input
+									type="number"
+									bind:value={formItem.qty}
+									on:input={() => validateQty(index)}
+									min="1"
+									max={formItem.selectedItem?.stockIn || 999}
+									placeholder="Jumlah barang"
+									class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+									required
+								/>
+								{#if formItem.qtyError}
+									<p class="text-red-600 text-sm mt-1">{formItem.qtyError}</p>
+								{/if}
+							</div>
+						</div>
+					</div>
+				{/each}
 			</div>
 
 			<div class="mt-8 flex justify-end space-x-4">
@@ -334,7 +429,7 @@
 				</button>
 				<button
 					type="submit"
-					disabled={loading || !!qtyError}
+					disabled={loading || form.items.some(item => item.qtyError)}
 					class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 				>
 					{#if loading}
