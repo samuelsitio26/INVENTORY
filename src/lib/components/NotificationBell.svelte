@@ -88,6 +88,12 @@
 		});
 	}
 
+	function handleSOCustomerDetail(so) {
+		dispatch('soCustomerDetail', {
+			soData: so
+		});
+	}
+
 	onMount(() => {
 		if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 			document.addEventListener('mousedown', handleClickOutside);
@@ -326,6 +332,14 @@
 									{#if so.notes}
 										<div class="text-xs text-gray-500 mt-1 italic">Note: {so.notes}</div>
 									{/if}
+									<div class="flex space-x-2 mt-2">
+										<button
+											on:click={() => handleSOCustomerDetail(so)}
+											class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+										>
+											Detail Produk
+										</button>
+									</div>
 								</div>
 							{/each}
 						{/if}

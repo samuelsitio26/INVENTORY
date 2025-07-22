@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { searchTerm } from '$lib/stores/search.js';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
+	import SOCustomerDetailModal from '$lib/components/common/SOCustomerDetailModal.svelte';
 	import {
 		getSPKNotifications,
 		approveSPKNotification,
@@ -18,6 +19,7 @@
 		{ path: '/inventory/rental', label: 'Pengajuan', icon: '📋' },
 		{ path: '/inventory/finishedgood', label: 'Finish Good', icon: '🏷️' },
 		{ path: '/inventory/rawmaterial', label: 'Raw Material', icon: '🧱' },
+		{ path: '/inventory/so-customer', label: 'SO Customer', icon: '🛒' },
 		{ path: '/inventory/spk-notifications', label: 'SPK Notifications', icon: '🔔' },
 		{ path: '/inventory/produksi-notifications', label: 'Produksi Notifications', icon: '🏭' }
 	];
@@ -37,6 +39,10 @@
 	let productionNotifications = [];
 	let manualProductionRequests = []; // For NotificationBell only
 	let soCustomerData = [];
+
+	// SO Customer Modal state
+	let showSOCustomerModal = false;
+	let selectedSOCustomer = null;
 
 	// Toast notification state
 	let toastNotifications = [];
@@ -568,6 +574,14 @@
 			});
 		}
 	}
+
+	// Handler for SO Customer detail
+	function handleSOCustomerDetail(event) {
+		const { soData } = event.detail;
+		selectedSOCustomer = soData;
+		showSOCustomerModal = true;
+		console.log('Opening SO Customer detail for:', soData.nomor_so);
+	}
 </script>
 
 {#if $page.url.pathname !== '/login'}
@@ -855,6 +869,7 @@
 							productionNotifications={manualProductionRequests}
 							productionRequests={productionRequestsData}
 							on:spkAction={handleSPKAction}
+							on:soCustomerDetail={handleSOCustomerDetail}
 						/>
 					</div>
 				</div>
@@ -871,6 +886,16 @@
 			<slot />
 		</main>
 	</div>
+
+	<!-- SO Customer Detail Modal -->
+	<SOCustomerDetailModal
+		bind:show={showSOCustomerModal}
+		soData={selectedSOCustomer}
+		on:close={() => {
+			showSOCustomerModal = false;
+			selectedSOCustomer = null;
+		}}
+	/>
 {:else}
 	<slot />
 {/if}

@@ -3,14 +3,15 @@
 const BASE_URL = 'https://directus.eltamaprimaindo.com';
 
 /**
- * Fetch SO Customer data from Directus API
- * @returns {Promise<Array>} Array of SO Customer data
+ * Fetch SO Customer data from Directus API with details
+ * @returns {Promise<Array>} Array of SO Customer data with product details
  */
 export async function fetchSOCustomer() {
 	try {
 		console.log('Fetching SO Customer data from:', `${BASE_URL}/items/so_customer`);
 
-		const response = await fetch(`${BASE_URL}/items/so_customer`, {
+		// Fetch SO Customer with details if the relation exists
+		const response = await fetch(`${BASE_URL}/items/so_customer?fields=*,details.*`, {
 			method: 'GET',
 			headers: {
 				'Content-Type': 'application/json'
@@ -128,5 +129,35 @@ export async function getAllSOCustomer() {
 	} catch (error) {
 		console.error('Error getting all SO Customer:', error);
 		return [];
+	}
+}
+
+/**
+ * Get specific SO Customer by ID with full details
+ * @param {string} soId - The SO Customer ID
+ * @returns {Promise<Object|null>} SO Customer data with details
+ */
+export async function getSOCustomerById(soId) {
+	try {
+		console.log('Getting SO Customer by ID:', soId);
+
+		const response = await fetch(`${BASE_URL}/items/so_customer/${soId}?fields=*,details.*`, {
+			method: 'GET',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		});
+
+		if (!response.ok) {
+			throw new Error(`HTTP error! status: ${response.status}`);
+		}
+
+		const result = await response.json();
+		console.log('SO Customer details:', result);
+
+		return result.data || null;
+	} catch (error) {
+		console.error('Error getting SO Customer by ID:', error);
+		return null;
 	}
 }
