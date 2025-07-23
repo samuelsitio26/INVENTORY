@@ -582,6 +582,20 @@
 		showSOCustomerModal = true;
 		console.log('Opening SO Customer detail for:', soData.nomor_so);
 	}
+
+	// Handler for SO Customer accept
+	function handleSOCustomerAccept(event) {
+		const { soData } = event.detail;
+		console.log('Accepting SO Customer:', soData.nomor_so);
+		
+		// Remove the SO from the soCustomerData array
+		soCustomerData = soCustomerData.filter(so => so.id !== soData.id || so.nomor_so !== soData.nomor_so);
+		
+		// Show success toast
+		showToast('SO Customer berhasil diterima dan dihapus dari notifikasi', 'success');
+		
+		console.log('SO Customer accepted and removed from notifications');
+	}
 </script>
 
 {#if $page.url.pathname !== '/login'}
@@ -870,6 +884,7 @@
 							productionRequests={productionRequestsData}
 							on:spkAction={handleSPKAction}
 							on:soCustomerDetail={handleSOCustomerDetail}
+							on:soCustomerAccept={handleSOCustomerAccept}
 						/>
 					</div>
 				</div>
