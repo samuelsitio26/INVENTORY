@@ -11,7 +11,7 @@
 		rejectSPKNotification
 	} from '$lib/services/notifications.js';
 	import { productionRequests } from '$lib/stores/notifications.js';
-	import { getAllSOCustomer } from '$lib/services/socustomer.js';
+	import { getAllSOCustomer, acceptSOCustomer, getUnacceptedSOCustomer } from '$lib/services/socustomer.js';
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -511,10 +511,10 @@
 			spkNotifications = [];
 		}
 
-		// Load SO Customer data
+		// Load SO Customer data (only unaccepted notifications)
 		try {
-			soCustomerData = await getAllSOCustomer();
-			console.log('SO Customer data loaded in layout:', soCustomerData.length);
+			soCustomerData = await getUnacceptedSOCustomer();
+			console.log('Unaccepted SO Customer data loaded in layout:', soCustomerData.length);
 		} catch (error) {
 			console.error('Error loading SO Customer data in layout:', error);
 			soCustomerData = [];
@@ -584,17 +584,46 @@
 	}
 
 	// Handler for SO Customer accept
-	function handleSOCustomerAccept(event) {
+	async function handleSOCustomerAccept(event) {
 		const { soData } = event.detail;
 		console.log('Accepting SO Customer:', soData.nomor_so);
 		
-		// Remove the SO from the soCustomerData array
-		soCustomerData = soCustomerData.filter(so => so.id !== soData.id || so.nomor_so !== soData.nomor_so);
-		
-		// Show success toast
-		showToast('SO Customer berhasil diterima dan dihapus dari notifikasi', 'success');
-		
-		console.log('SO Customer accepted and removed from notifications');
+		try {
+			// Call API to mark SO as accepted in database
+			const success = await acceptSOCustomer(soData.id);
+			
+			if (success) {
+				// Remove the SO from the soCustomerData array
+				soCustomerData = soCustomerData.filter(so => so.id !== soData.id);
+				
+				// Show success toast
+				showToastNotification({
+					title: 'Berhasil',
+					message: 'SO Customer berhasil diterima dan dihapus dari notifikasi',
+					type: 'success',
+					icon: '✅'
+				});
+				
+				console.log('SO Customer accepted and removed from notifications');
+			} else {
+				// Show error toast if API call failed
+				showToastNotification({
+					title: 'Gagal',
+					message: 'Gagal menerima SO Customer. Silakan coba lagi.',
+					type: 'error',
+					icon: '❌'
+				});
+				console.error('Failed to accept SO Customer');
+			}
+		} catch (error) {
+			console.error('Error accepting SO Customer:', error);
+			showToastNotification({
+				title: 'Error',
+				message: 'Terjadi kesalahan saat menerima SO Customer.',
+				type: 'error',
+				icon: '❌'
+			});
+		}
 	}
 </script>
 
