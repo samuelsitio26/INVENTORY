@@ -23,8 +23,42 @@
 	// Loading state for status updates
 	let updatingStatus = {};
 
+	// Dropdown state
+	let openDropdowns = {};
+
+	function toggleDropdown(soId) {
+		openDropdowns[soId] = !openDropdowns[soId];
+		// Close other dropdowns
+		Object.keys(openDropdowns).forEach((id) => {
+			if (id !== soId.toString()) {
+				openDropdowns[id] = false;
+			}
+		});
+	}
+
+	function closeDropdown(soId) {
+		openDropdowns[soId] = false;
+	}
+
+	// Close dropdown when clicking outside
+	function handleClickOutside(event) {
+		if (!event.target.closest('.relative')) {
+			Object.keys(openDropdowns).forEach((id) => {
+				openDropdowns[id] = false;
+			});
+		}
+	}
+
 	onMount(async () => {
 		await loadSOCustomers();
+
+		// Add click outside listener
+		document.addEventListener('click', handleClickOutside);
+
+		// Cleanup
+		return () => {
+			document.removeEventListener('click', handleClickOutside);
+		};
 	});
 
 	async function loadSOCustomers() {
@@ -320,120 +354,151 @@
 										{so.status === 'ready' ? 'Ready' : 'Pending'}
 									</span>
 								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-									<button
-										on:click={() => openDetailModal(so)}
-										class="text-indigo-600 hover:text-indigo-900 mr-3 p-1"
-										title="Detail Produk"
-										aria-label="Detail Produk"
-									>
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-											/>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-											/>
-										</svg>
-									</button>
+								<td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+									<div class="relative">
+										<button
+											on:click={() => toggleDropdown(so.id)}
+											class="text-gray-400 hover:text-gray-600 p-1"
+											aria-label="More actions"
+										>
+											<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+												<path
+													d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"
+												/>
+											</svg>
+										</button>
 
-									{#if so.status !== 'ready'}
-										<button
-											on:click={() => updateSOStatus(so.id, 'ready')}
-											disabled={updatingStatus[so.id]}
-											class="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-										>
-											{#if updatingStatus[so.id]}
-												<svg
-													class="animate-spin -ml-1 mr-2 h-3 w-3 text-white"
-													xmlns="http://www.w3.org/2000/svg"
-													fill="none"
-													viewBox="0 0 24 24"
-												>
-													<circle
-														class="opacity-25"
-														cx="12"
-														cy="12"
-														r="10"
-														stroke="currentColor"
-														stroke-width="4"
-													></circle>
-													<path
-														class="opacity-75"
-														fill="currentColor"
-														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-													></path>
-												</svg>
-												Loading...
-											{:else}
-												<svg
-													class="w-3 h-3 mr-1"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M5 13l4 4L19 7"
-													></path>
-												</svg>
-												Ready
-											{/if}
-										</button>
-									{:else}
-										<button
-											on:click={() => updateSOStatus(so.id, 'pending')}
-											disabled={updatingStatus[so.id]}
-											class="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
-										>
-											{#if updatingStatus[so.id]}
-												<svg
-													class="animate-spin -ml-1 mr-2 h-3 w-3 text-white"
-													xmlns="http://www.w3.org/2000/svg"
-													fill="none"
-													viewBox="0 0 24 24"
-												>
-													<circle
-														class="opacity-25"
-														cx="12"
-														cy="12"
-														r="10"
-														stroke="currentColor"
-														stroke-width="4"
-													></circle>
-													<path
-														class="opacity-75"
-														fill="currentColor"
-														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-													></path>
-												</svg>
-												Loading...
-											{:else}
-												<svg
-													class="w-3 h-3 mr-1"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-													></path>
-												</svg>
-												Pending
-											{/if}
-										</button>
-									{/if}
+										{#if openDropdowns[so.id]}
+											<div
+												class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200"
+											>
+												<div class="py-1">
+													<button
+														on:click={() => {
+															openDetailModal(so);
+															closeDropdown(so.id);
+														}}
+														class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+													>
+														<svg
+															class="w-4 h-4 mr-3"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																stroke-width="2"
+																d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+															/>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																stroke-width="2"
+																d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+															/>
+														</svg>
+														View Detail
+													</button>
+
+													{#if so.status !== 'ready'}
+														<button
+															on:click={() => {
+																updateSOStatus(so.id, 'ready');
+																closeDropdown(so.id);
+															}}
+															disabled={updatingStatus[so.id]}
+															class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+														>
+															{#if updatingStatus[so.id]}
+																<svg
+																	class="animate-spin w-4 h-4 mr-3"
+																	fill="none"
+																	viewBox="0 0 24 24"
+																>
+																	<circle
+																		class="opacity-25"
+																		cx="12"
+																		cy="12"
+																		r="10"
+																		stroke="currentColor"
+																		stroke-width="4"
+																	></circle>
+																	<path
+																		class="opacity-75"
+																		fill="currentColor"
+																		d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+																	></path>
+																</svg>
+															{:else}
+																<svg
+																	class="w-4 h-4 mr-3"
+																	fill="none"
+																	stroke="currentColor"
+																	viewBox="0 0 24 24"
+																>
+																	<path
+																		stroke-linecap="round"
+																		stroke-linejoin="round"
+																		stroke-width="2"
+																		d="M5 13l4 4L19 7"
+																	/>
+																</svg>
+															{/if}
+															Set Ready
+														</button>
+													{:else}
+														<button
+															on:click={() => {
+																updateSOStatus(so.id, 'pending');
+																closeDropdown(so.id);
+															}}
+															disabled={updatingStatus[so.id]}
+															class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+														>
+															{#if updatingStatus[so.id]}
+																<svg
+																	class="animate-spin w-4 h-4 mr-3"
+																	fill="none"
+																	viewBox="0 0 24 24"
+																>
+																	<circle
+																		class="opacity-25"
+																		cx="12"
+																		cy="12"
+																		r="10"
+																		stroke="currentColor"
+																		stroke-width="4"
+																	></circle>
+																	<path
+																		class="opacity-75"
+																		fill="currentColor"
+																		d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+																	></path>
+																</svg>
+															{:else}
+																<svg
+																	class="w-4 h-4 mr-3"
+																	fill="none"
+																	stroke="currentColor"
+																	viewBox="0 0 24 24"
+																>
+																	<path
+																		stroke-linecap="round"
+																		stroke-linejoin="round"
+																		stroke-width="2"
+																		d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+																	/>
+																</svg>
+															{/if}
+															Set Pending
+														</button>
+													{/if}
+												</div>
+											</div>
+										{/if}
+									</div>
 								</td>
 							</tr>
 						{/each}
