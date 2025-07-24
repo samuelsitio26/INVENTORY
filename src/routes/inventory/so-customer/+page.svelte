@@ -20,6 +20,9 @@
 	let itemsPerPage = 10;
 	let totalItems = 0;
 
+	// Loading state for status updates
+	let updatingStatus = {};
+
 	onMount(async () => {
 		await loadSOCustomers();
 	});
@@ -43,6 +46,50 @@
 		showDetailModal = true;
 	}
 
+	async function updateSOStatus(soId, newStatus) {
+		updatingStatus[soId] = true;
+
+		try {
+			const response = await fetch(
+				`https://directus.eltamaprimaindo.com/items/so_customer/${soId}`,
+				{
+					method: 'PATCH',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({
+						status: newStatus
+					})
+				}
+			);
+
+			if (!response.ok) {
+				throw new Error('Gagal mengupdate status');
+			}
+
+			// Update local data
+			soCustomers = soCustomers.map((so) => (so.id === soId ? { ...so, status: newStatus } : so));
+
+			console.log(`Status SO ${soId} berhasil diubah ke ${newStatus}`);
+		} catch (err) {
+			console.error('Error updating status:', err);
+			alert('Gagal mengupdate status SO. Silakan coba lagi.');
+		} finally {
+			updatingStatus[soId] = false;
+		}
+	}
+
+	function getStatusColor(status) {
+		switch (status) {
+			case 'ready':
+				return 'bg-green-100 text-green-800';
+			case 'pending':
+				return 'bg-yellow-100 text-yellow-800';
+			default:
+				return 'bg-gray-100 text-gray-800';
+		}
+	}
+
 	function formatCurrency(amount) {
 		return new Intl.NumberFormat('id-ID', {
 			style: 'currency',
@@ -58,7 +105,9 @@
 			so.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
 			so.sales_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-		return matchesSearch;
+		const matchesStatus = statusFilter === 'all' || so.status === statusFilter;
+
+		return matchesSearch && matchesStatus;
 	});
 
 	// Pagination
@@ -114,6 +163,20 @@
 					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
 				/>
 			</div>
+			<div>
+				<label for="status-filter" class="block text-sm font-medium text-gray-700 mb-1">
+					Status
+				</label>
+				<select
+					id="status-filter"
+					bind:value={statusFilter}
+					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+				>
+					<option value="all">Semua Status</option>
+					<option value="pending">Pending</option>
+					<option value="ready">Ready</option>
+				</select>
+			</div>
 		</div>
 	</div>
 
@@ -155,8 +218,8 @@
 				</svg>
 				<h3 class="mt-2 text-sm font-medium text-gray-900">Tidak ada SO Customer</h3>
 				<p class="mt-1 text-sm text-gray-500">
-					{searchTerm
-						? 'Tidak ditemukan SO yang sesuai dengan pencarian.'
+					{searchTerm || statusFilter !== 'all'
+						? 'Tidak ditemukan SO yang sesuai dengan pencarian atau filter.'
 						: 'Belum ada data SO Customer.'}
 				</p>
 			</div>
@@ -164,94 +227,219 @@
 	{:else}
 		<!-- SO Customer Table -->
 		<div class="bg-white shadow overflow-hidden sm:rounded-lg">
-			<table class="min-w-full divide-y divide-gray-200">
-				<thead class="bg-gray-50">
-					<tr>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-						>
-							Nomor SO
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-						>
-							Customer
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-						>
-							Sales
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-						>
-							Tanggal SO
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-						>
-							Tanggal Kirim
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-						>
-							Total
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-						>
-							Items
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-						>
-							Aksi
-						</th>
-					</tr>
-				</thead>
-				<tbody class="bg-white divide-y divide-gray-200">
-					{#each paginatedSOs as so}
-						<tr class="hover:bg-gray-50">
-							<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-								{so.nomor_so}
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-								<div>
-									<div class="font-medium text-gray-900">{so.company_name || '-'}</div>
-									{#if so.nomor_po_customer}
-										<div class="text-xs text-gray-500">PO: {so.nomor_po_customer}</div>
-									{/if}
-								</div>
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-								{so.sales_name || '-'} ({so.sales_code || '-'})
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-								{new Date(so.tanggal_so).toLocaleDateString('id-ID')}
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-								{so.tanggal_kirim
-									? new Date(so.tanggal_kirim).toLocaleDateString('id-ID')
-									: 'Belum ditentukan'}
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-								{formatCurrency(so.grand_total || 0)}
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-								{so.details?.length || 0} produk
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-								<button
-									on:click={() => openDetailModal(so)}
-									class="text-indigo-600 hover:text-indigo-900"
-								>
-									Detail Produk
-								</button>
-							</td>
+			<div class="overflow-x-auto">
+				<table class="min-w-full divide-y divide-gray-200">
+					<thead class="bg-gray-50">
+						<tr>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+							>
+								Nomor SO
+							</th>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+							>
+								Customer
+							</th>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+							>
+								Sales
+							</th>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+							>
+								Tanggal SO
+							</th>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+							>
+								Tanggal Kirim
+							</th>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+							>
+								Total
+							</th>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+							>
+								Items
+							</th>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+							>
+								Status
+							</th>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+							>
+								Aksi
+							</th>
 						</tr>
-					{/each}
-				</tbody>
-			</table>
+					</thead>
+					<tbody class="bg-white divide-y divide-gray-200">
+						{#each paginatedSOs as so}
+							<tr class="hover:bg-gray-50">
+								<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+									{so.nomor_so}
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+									<div>
+										<div class="font-medium text-gray-900">
+											{so.company_name || so.customer_name || '-'}
+										</div>
+										{#if so.nomor_po_customer}
+											<div class="text-xs text-gray-500">PO: {so.nomor_po_customer}</div>
+										{/if}
+									</div>
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+									{so.sales_name || '-'} ({so.sales_code || '-'})
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+									{new Date(so.tanggal_so).toLocaleDateString('id-ID')}
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+									{so.tanggal_kirim
+										? new Date(so.tanggal_kirim).toLocaleDateString('id-ID')
+										: 'Belum ditentukan'}
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+									{formatCurrency(so.grand_total || 0)}
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+									{so.details?.length || 0} produk
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap">
+									<span
+										class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getStatusColor(
+											so.status || 'pending'
+										)}"
+									>
+										{so.status === 'ready' ? 'Ready' : 'Pending'}
+									</span>
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+									<button
+										on:click={() => openDetailModal(so)}
+										class="text-indigo-600 hover:text-indigo-900 mr-3 p-1"
+										title="Detail Produk"
+										aria-label="Detail Produk"
+									>
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+											/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+											/>
+										</svg>
+									</button>
+
+									{#if so.status !== 'ready'}
+										<button
+											on:click={() => updateSOStatus(so.id, 'ready')}
+											disabled={updatingStatus[so.id]}
+											class="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+										>
+											{#if updatingStatus[so.id]}
+												<svg
+													class="animate-spin -ml-1 mr-2 h-3 w-3 text-white"
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+												>
+													<circle
+														class="opacity-25"
+														cx="12"
+														cy="12"
+														r="10"
+														stroke="currentColor"
+														stroke-width="4"
+													></circle>
+													<path
+														class="opacity-75"
+														fill="currentColor"
+														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+													></path>
+												</svg>
+												Loading...
+											{:else}
+												<svg
+													class="w-3 h-3 mr-1"
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M5 13l4 4L19 7"
+													></path>
+												</svg>
+												Ready
+											{/if}
+										</button>
+									{:else}
+										<button
+											on:click={() => updateSOStatus(so.id, 'pending')}
+											disabled={updatingStatus[so.id]}
+											class="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
+										>
+											{#if updatingStatus[so.id]}
+												<svg
+													class="animate-spin -ml-1 mr-2 h-3 w-3 text-white"
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+												>
+													<circle
+														class="opacity-25"
+														cx="12"
+														cy="12"
+														r="10"
+														stroke="currentColor"
+														stroke-width="4"
+													></circle>
+													<path
+														class="opacity-75"
+														fill="currentColor"
+														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+													></path>
+												</svg>
+												Loading...
+											{:else}
+												<svg
+													class="w-3 h-3 mr-1"
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+													></path>
+												</svg>
+												Pending
+											{/if}
+										</button>
+									{/if}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
 		</div>
 
 		<!-- Pagination -->
