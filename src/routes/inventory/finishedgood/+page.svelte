@@ -668,12 +668,6 @@
 			if (!sjFormData.kode_sales.trim()) {
 				throw new Error('Kode Sales harus diisi');
 			}
-			if (!sjFormData.nama_sopir.trim()) {
-				throw new Error('Nama Sopir harus diisi');
-			}
-			if (!sjFormData.no_kendaraan.trim()) {
-				throw new Error('No Kendaraan harus diisi');
-			}
 
 			// Validate items
 			const validItems = sjFormData.items.filter(item => 
@@ -1626,12 +1620,11 @@
 							</div>
 							
 							<div>
-								<label for="edit_kode_warna" class="block text-sm font-medium text-gray-700 mb-1">Kode Warna *</label>
+								<label for="edit_kode_warna" class="block text-sm font-medium text-gray-700 mb-1">Kode Warna</label>
 								<input
 									id="edit_kode_warna"
 									type="text"
 									bind:value={editFormData.kode_warna}
-									required
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 								/>
 							</div>
@@ -2293,7 +2286,14 @@
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.sisa_stok}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{getGudangName(item.kode_gudang)}</td>
 								<td class="px-4 py-4 whitespace-nowrap">
-									<StatusBadge status={item.status} />
+									<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {
+										item.status === 'Ready' ? 'bg-green-100 text-green-800' :
+										item.status === 'Low Stock' ? 'bg-yellow-100 text-yellow-800' :
+										item.status === 'Out of Stock' ? 'bg-red-100 text-red-800' :
+										'bg-gray-100 text-gray-800'
+									}">
+										{item.status}
+									</span>
 								</td>
 								<td class="px-4 py-4 whitespace-nowrap">
 									<button

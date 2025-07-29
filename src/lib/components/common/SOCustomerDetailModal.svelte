@@ -27,9 +27,15 @@
 
 	// Function to calculate item total
 	function getItemTotal(item) {
-		const quantity = item.quantity || 0;
-		const price = item.price || 0;
-		const discount = item.discount || 0;
+		// If total is already provided by API, use it
+		if (item.total !== undefined && item.total !== null) {
+			return item.total;
+		}
+		
+		// Otherwise calculate it
+		const quantity = item.qty || item.quantity || 0;
+		const price = item.harga_satuan || item.price || item.harga || 0;
+		const discount = item.discount || item.diskon || 0;
 		const subtotal = quantity * price;
 		const discountAmount = (subtotal * discount) / 100;
 		return subtotal - discountAmount;
@@ -71,11 +77,11 @@
 						<div class="space-y-3">
 							<div>
 								<label class="text-sm font-medium text-gray-500">Nama Perusahaan</label>
-								<p class="text-gray-900 font-medium">{soData.company_name || '-'}</p>
+								<p class="text-gray-900 font-medium">{soData.customer_name || '-'}</p>
 							</div>
 							<div>
 								<label class="text-sm font-medium text-gray-500">Kode Customer</label>
-								<p class="text-gray-900">{soData.customer_code || '-'}</p>
+								<p class="text-gray-900">{soData.kode_customer || '-'}</p>
 							</div>
 							{#if soData.nomor_po_customer}
 								<div>
@@ -158,25 +164,25 @@
 										<tr class="hover:bg-gray-50">
 											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
 											<td class="px-4 py-4 text-sm text-gray-900 font-medium">
-												{item.product_name || item.nama_produk || '-'}
+												{item.nama_barang || item.product_name || item.nama_produk || '-'}
 											</td>
 											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-												{item.product_code || item.kode_produk || '-'}
+												{item.kode_barang || item.product_code || item.kode_produk || '-'}
 											</td>
 											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-												{item.quantity || 0}
+												{item.qty || item.quantity || 0}
 											</td>
 											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
 												{item.unit || item.satuan || '-'}
 											</td>
 											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-												{formatCurrency(item.price || item.harga || 0)}
+												{formatCurrency(item.harga_satuan || item.price || item.harga || 0)}
 											</td>
 											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
 												{item.discount || item.diskon || 0}%
 											</td>
 											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-												{formatCurrency(getItemTotal(item))}
+												{formatCurrency(item.total || getItemTotal(item))}
 											</td>
 										</tr>
 									{/each}

@@ -706,7 +706,14 @@
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.in_liter || 0}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.in_kg || 0}</td>
 								<td class="px-4 py-4 whitespace-nowrap">
-									<StatusBadge status={item.status} />
+									<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {
+										item.status === 'Ready' ? 'bg-green-100 text-green-800' :
+										item.status === 'Low Stock' ? 'bg-yellow-100 text-yellow-800' :
+										item.status === 'Out of Stock' ? 'bg-red-100 text-red-800' :
+										'bg-gray-100 text-gray-800'
+									}">
+										{item.status}
+									</span>
 								</td>
 							</tr>
 						{/each}

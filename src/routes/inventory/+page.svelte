@@ -1014,7 +1014,7 @@
 												>
 											{:else if item.status === 'Out of Stock'}
 												<span
-													class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+													class="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-gray-800"
 													>Out of Stock</span
 												>
 											{:else}
