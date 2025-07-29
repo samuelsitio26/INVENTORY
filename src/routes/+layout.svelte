@@ -11,7 +11,11 @@
 		rejectSPKNotification
 	} from '$lib/services/notifications.js';
 	import { productionRequests } from '$lib/stores/notifications.js';
-	import { getAllSOCustomer, acceptSOCustomer, getUnacceptedSOCustomer } from '$lib/services/socustomer.js';
+	import {
+		getAllSOCustomer,
+		acceptSOCustomer,
+		getUnacceptedSOCustomer
+	} from '$lib/services/socustomer.js';
 
 	const menuItems = [
 		{ path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -587,15 +591,15 @@
 	async function handleSOCustomerAccept(event) {
 		const { soData } = event.detail;
 		console.log('Accepting SO Customer:', soData.nomor_so);
-		
+
 		try {
 			// Call API to mark SO as accepted in database
 			const success = await acceptSOCustomer(soData.id);
-			
+
 			if (success) {
 				// Remove the SO from the soCustomerData array
-				soCustomerData = soCustomerData.filter(so => so.id !== soData.id);
-				
+				soCustomerData = soCustomerData.filter((so) => so.id !== soData.id);
+
 				// Show success toast
 				showToastNotification({
 					title: 'Berhasil',
@@ -603,7 +607,7 @@
 					type: 'success',
 					icon: '✅'
 				});
-				
+
 				console.log('SO Customer accepted and removed from notifications');
 			} else {
 				// Show error toast if API call failed
@@ -692,7 +696,7 @@
 				class="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-purple-600/20 to-indigo-600/20 animate-pulse duration-[3000ms]"
 			></div>
 
-			<div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+			<div class="relative max-w-6xl mx-auto px-1 sm:px-1 lg:px-2">
 				<div class="flex justify-between items-center h-24">
 					<div class="flex items-center space-x-6">
 						<!-- Logo/Icon with Glow Effect -->
@@ -853,14 +857,14 @@
 				style="background-image: url('data:image/svg+xml;utf8,<svg width=&quot;40&quot; height=&quot;40&quot; viewBox=&quot;0 0 40 40&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><g fill=&quot;%23f3f4f6&quot; fill-opacity=&quot;0.4&quot;><path d=&quot;M20 20c0 11.046-8.954 20-20 20v20h40V20H20z&quot;/></g></svg>')"
 			></div>
 
-			<div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+			<div class="relative max-w-6xl mx-auto px-1 sm:px-1 lg:px-2">
 				<div class="flex items-center justify-between h-16">
 					<!-- Navigation Items -->
-					<div class="flex items-center space-x-2">
+					<div class="flex items-center space-x-1">
 						{#each menuItems as item, index}
 							<a
 								href={item.path}
-								class="group relative inline-flex items-center px-6 py-3 text-sm font-semibold transition-all duration-300 rounded-xl
+								class="group relative inline-flex items-center px-4 py-3 text-sm font-semibold transition-all duration-300 rounded-xl
 							{$page.url.pathname === item.path
 									? 'text-white bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg shadow-blue-500/25 transform scale-105'
 									: 'text-gray-600 hover:text-gray-900 hover:bg-gray-100/80 hover:shadow-md hover:scale-105'}"
@@ -926,7 +930,7 @@
 		</nav>
 
 		<!-- Main Content -->
-		<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+		<main class="max-w-6xl mx-auto px-1 sm:px-1 lg:px-2 py-8">
 			<slot />
 		</main>
 	</div>
