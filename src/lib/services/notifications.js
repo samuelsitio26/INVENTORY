@@ -1,9 +1,9 @@
 /**
  * Service untuk mengelola notifikasi sistem
  */
+import api from './api.js';
 
 const DIRECTUS_URL = 'https://directus.eltamaprimaindo.com';
-const TOKEN = 'JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz';
 
 /**
  * Mengambil notifikasi SPK yang menunggu approval
@@ -11,31 +11,23 @@ const TOKEN = 'JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz';
 export async function getSPKNotifications() {
 	try {
 		console.log('Fetching SPK notifications from SPK collection...');
-		
+
 		// Ambil SPK dengan status pending_approval sebagai notifikasi
-		const response = await fetch(
-			`${DIRECTUS_URL}/items/spk?filter[status][_eq]=pending_approval&sort=-date_created`,
-			{
-				headers: {
-					Authorization: `Bearer ${TOKEN}`,
-					'Content-Type': 'application/json'
-				}
+		const response = await api.get('/items/spk', {
+			params: {
+				'filter[status][_eq]': 'pending_approval',
+				sort: '-date_created'
 			}
+		});
+
+		console.log(
+			'SPK notifications fetched successfully:',
+			response.data?.data?.length || 0,
+			'items'
 		);
 
-		console.log('SPK notifications response status:', response.status);
-
-		if (!response.ok) {
-			const errorText = await response.text();
-			console.log('SPK notifications error response:', errorText);
-			throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-		}
-
-		const result = await response.json();
-		console.log('SPK notifications fetched successfully:', result.data?.length || 0, 'items');
-		
 		// Transform SPK data to notification format
-		const notifications = (result.data || []).map(spk => ({
+		const notifications = (response.data?.data || []).map((spk) => ({
 			id: `spk_${spk.id}`,
 			type: 'spk_approval',
 			title: 'SPK Menunggu Persetujuan',
@@ -65,7 +57,7 @@ export async function getSPKNotifications() {
 export async function createSPKNotification(notificationData) {
 	try {
 		console.log('Creating SPK notification (logging):', notificationData);
-		
+
 		// Karena collection spk_notifications belum ada, kita hanya log notifikasi
 		// Status SPK sudah diupdate ke pending_approval di submitSPK function
 		console.log('SPK notification logged successfully:', {
@@ -87,23 +79,19 @@ export async function createSPKNotification(notificationData) {
  */
 export async function updateSPKNotification(notificationId, updateData) {
 	try {
-		const response = await fetch(`${DIRECTUS_URL}/items/spk_notifications/${notificationId}`, {
-			method: 'PATCH',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${TOKEN}`
-			},
-			body: JSON.stringify(updateData)
-		});
+		// Since we're using SPK ID as notification ID with prefix, extract the actual SPK ID
+		const spkId = notificationId.replace('spk_', '');
 
-		if (!response.ok) {
-			throw new Error(`HTTP error! status: ${response.status}`);
-		}
-
-		const result = await response.json();
-		return result.data;
+		const response = await api.patch(`/items/spk/${spkId}`, updateData);
+		return response.data;
 	} catch (error) {
 		console.error('Error updating SPK notification:', error);
+		if (error.response) {
+			console.error('Error response:', error.response.data);
+			throw new Error(
+				`HTTP error! status: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`
+			);
+		}
 		throw error;
 	}
 }
@@ -113,20 +101,19 @@ export async function updateSPKNotification(notificationId, updateData) {
  */
 export async function deleteSPKNotification(notificationId) {
 	try {
-		const response = await fetch(`${DIRECTUS_URL}/items/spk_notifications/${notificationId}`, {
-			method: 'DELETE',
-			headers: {
-				Authorization: `Bearer ${TOKEN}`
-			}
-		});
+		// Since we're using SPK ID as notification ID with prefix, extract the actual SPK ID
+		const spkId = notificationId.replace('spk_', '');
 
-		if (!response.ok) {
-			throw new Error(`HTTP error! status: ${response.status}`);
-		}
-
+		const response = await api.delete(`/items/spk/${spkId}`);
 		return true;
 	} catch (error) {
 		console.error('Error deleting SPK notification:', error);
+		if (error.response) {
+			console.error('Error response:', error.response.data);
+			throw new Error(
+				`HTTP error! status: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`
+			);
+		}
 		throw error;
 	}
 }
@@ -144,30 +131,27 @@ export async function markSPKNotificationAsRead(notificationId) {
 /**
  * Approve SPK notification
  */
-export async function approveSPKNotification(spkId) {
+export async function approveSPKNotification(notificationId, spkId) {
 	try {
-		console.log('Approving SPK:', spkId);
-		
-		// Update SPK status ke approved
-		const spkResponse = await fetch(`${DIRECTUS_URL}/items/spk/${spkId}`, {
-			method: 'PATCH',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${TOKEN}`
-			},
-			body: JSON.stringify({
-				status: 'approved'
-			})
+		console.log('Approving SPK:', spkId, 'Notification:', notificationId);
+
+		// Update SPK status ke approved dengan tambahan fields
+		const response = await api.patch(`/items/spk/${spkId}`, {
+			status: 'approved',
+			approved_at: new Date().toISOString(),
+			approved_by: 'Admin'
 		});
 
-		if (!spkResponse.ok) {
-			throw new Error(`HTTP error! status: ${spkResponse.status}`);
-		}
-
-		console.log('SPK approved successfully');
+		console.log('SPK approved successfully:', response.data);
 		return true;
 	} catch (error) {
 		console.error('Error approving SPK:', error);
+		if (error.response) {
+			console.error('Error response:', error.response.data);
+			throw new Error(
+				`HTTP error! status: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`
+			);
+		}
 		throw error;
 	}
 }
@@ -175,30 +159,28 @@ export async function approveSPKNotification(spkId) {
 /**
  * Reject SPK notification
  */
-export async function rejectSPKNotification(spkId, reason = '') {
+export async function rejectSPKNotification(notificationId, spkId, reason = '') {
 	try {
-		console.log('Rejecting SPK:', spkId, 'Reason:', reason);
-		
-		// Update SPK status ke rejected
-		const spkResponse = await fetch(`${DIRECTUS_URL}/items/spk/${spkId}`, {
-			method: 'PATCH',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${TOKEN}`
-			},
-			body: JSON.stringify({
-				status: 'rejected'
-			})
+		console.log('Rejecting SPK:', spkId, 'Notification:', notificationId, 'Reason:', reason);
+
+		// Update SPK status ke rejected dengan tambahan fields
+		const response = await api.patch(`/items/spk/${spkId}`, {
+			status: 'rejected',
+			rejected_at: new Date().toISOString(),
+			rejected_by: 'Admin',
+			rejection_reason: reason
 		});
 
-		if (!spkResponse.ok) {
-			throw new Error(`HTTP error! status: ${spkResponse.status}`);
-		}
-
-		console.log('SPK rejected successfully');
+		console.log('SPK rejected successfully:', response.data);
 		return true;
 	} catch (error) {
 		console.error('Error rejecting SPK:', error);
+		if (error.response) {
+			console.error('Error response:', error.response.data);
+			throw new Error(
+				`HTTP error! status: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`
+			);
+		}
 		throw error;
 	}
 }
@@ -208,21 +190,16 @@ export async function rejectSPKNotification(spkId, reason = '') {
  */
 export async function getSPKDetails(spkId) {
 	try {
-		const response = await fetch(`${DIRECTUS_URL}/items/spk/${spkId}`, {
-			headers: {
-				Authorization: `Bearer ${TOKEN}`,
-				'Content-Type': 'application/json'
-			}
-		});
-
-		if (!response.ok) {
-			throw new Error(`HTTP error! status: ${response.status}`);
-		}
-
-		const result = await response.json();
-		return result.data;
+		const response = await api.get(`/items/spk/${spkId}`);
+		return response.data?.data;
 	} catch (error) {
 		console.error('Error fetching SPK details:', error);
+		if (error.response) {
+			console.error('Error response:', error.response.data);
+			throw new Error(
+				`HTTP error! status: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`
+			);
+		}
 		throw error;
 	}
 }

@@ -1,6 +1,5 @@
 // src/lib/services/socustomer.js
-
-const BASE_URL = 'https://directus.eltamaprimaindo.com';
+import api from './api.js';
 
 /**
  * Fetch SO Customer data from Directus API with details
@@ -8,26 +7,18 @@ const BASE_URL = 'https://directus.eltamaprimaindo.com';
  */
 export async function fetchSOCustomer() {
 	try {
-		console.log('Fetching SO Customer data from:', `${BASE_URL}/items/so_customer`);
+		console.log('Fetching SO Customer data...');
 
 		// Fetch SO Customer with details if the relation exists
-		const response = await fetch(`${BASE_URL}/items/so_customer?fields=*,details.*`, {
-			method: 'GET',
-			headers: {
-				'Content-Type': 'application/json'
+		const response = await api.get('/items/so_customer', {
+			params: {
+				fields: '*,details.*'
 			}
 		});
 
-		console.log('SO Customer API response status:', response.status);
+		console.log('SO Customer API response:', response.data);
 
-		if (!response.ok) {
-			throw new Error(`HTTP error! status: ${response.status}`);
-		}
-
-		const result = await response.json();
-		console.log('SO Customer API result:', result);
-
-		return result.data || [];
+		return response.data?.data || [];
 	} catch (error) {
 		console.error('Error fetching SO Customer data:', error);
 		return [];
@@ -141,21 +132,14 @@ export async function getSOCustomerById(soId) {
 	try {
 		console.log('Getting SO Customer by ID:', soId);
 
-		const response = await fetch(`${BASE_URL}/items/so_customer/${soId}?fields=*,details.*`, {
-			method: 'GET',
-			headers: {
-				'Content-Type': 'application/json'
+		const response = await api.get(`/items/so_customer/${soId}`, {
+			params: {
+				fields: '*,details.*'
 			}
 		});
 
-		if (!response.ok) {
-			throw new Error(`HTTP error! status: ${response.status}`);
-		}
-
-		const result = await response.json();
-		console.log('SO Customer details:', result);
-
-		return result.data || null;
+		console.log('SO Customer details:', response.data);
+		return response.data?.data || null;
 	} catch (error) {
 		console.error('Error getting SO Customer by ID:', error);
 		return null;
@@ -173,24 +157,12 @@ export async function acceptSOCustomer(soId) {
 
 		// First, try to update in database
 		try {
-			const response = await fetch(`${BASE_URL}/items/so_customer/${soId}`, {
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
-				},
-				body: JSON.stringify({
-					notification_accepted: true,
-					accepted_at: new Date().toISOString()
-				})
+			const response = await api.patch(`/items/so_customer/${soId}`, {
+				notification_accepted: true,
+				accepted_at: new Date().toISOString()
 			});
 
-			if (response.ok) {
-				const result = await response.json();
-				console.log('SO Customer accepted successfully in database:', result);
-			} else {
-				console.warn('Database update failed, using localStorage fallback');
-			}
+			console.log('SO Customer accepted successfully in database:', response.data);
 		} catch (dbError) {
 			console.warn('Database update error, using localStorage fallback:', dbError);
 		}
@@ -218,51 +190,36 @@ export async function acceptSOCustomer(soId) {
 export async function getUnacceptedSOCustomer() {
 	try {
 		console.log('Getting unaccepted SO Customer data...');
-		
-		// First try to get from database with filter
-		try {
-			const response = await fetch(`${BASE_URL}/items/so_customer?fields=*,details.*&filter[notification_accepted][_neq]=true`, {
-				method: 'GET',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
-				}
-			});
 
-			if (response.ok) {
-				const result = await response.json();
-				console.log('Successfully got unaccepted SO from database:', result);
-				
-				const data = result.data || [];
-				const sorted = data.sort((a, b) => new Date(b.tanggal_so) - new Date(a.tanggal_so));
-				console.log('Sorted unaccepted SO Customer data from database:', sorted.length, 'items');
-				return sorted;
-			}
-		} catch (dbError) {
-			console.warn('Database filter failed, using localStorage fallback:', dbError);
-		}
-
-		// Fallback: Get all data and filter using localStorage
-		console.log('Using localStorage fallback for filtering accepted SO...');
+		// Get all data since the filter might be causing permission issues
+		console.log('Fetching all SO Customer data and filtering client-side...');
 		const allData = await getAllSOCustomer();
-		
+
 		// Get accepted SO IDs from localStorage
 		const acceptedSOs = JSON.parse(localStorage.getItem('acceptedSOCustomers') || '[]');
 		console.log('Accepted SO IDs from localStorage:', acceptedSOs);
-		
+
 		// Filter out accepted SOs
-		const unacceptedData = allData.filter(so => {
+		const unacceptedData = allData.filter((so) => {
 			const isAccepted = acceptedSOs.includes(so.id.toString()) || acceptedSOs.includes(so.id);
-			return !isAccepted;
+			return !isAccepted && !so.notification_accepted; // Also check database field if available
 		});
-		
-		console.log('Filtered unaccepted SO Customer data:', unacceptedData.length, 'items');
-		return unacceptedData;
-		
+
+		// Sort by tanggal_so (newest first)
+		const sorted = unacceptedData.sort((a, b) => new Date(b.tanggal_so) - new Date(a.tanggal_so));
+		console.log('Filtered unaccepted SO Customer data:', sorted.length, 'items');
+		return sorted;
 	} catch (error) {
 		console.error('Error getting unaccepted SO Customer:', error);
+
 		// Final fallback to getAllSOCustomer
-		return await getAllSOCustomer();
+		try {
+			console.log('Using fallback: returning all SO Customer data');
+			return await getAllSOCustomer();
+		} catch (fallbackError) {
+			console.error('Fallback also failed:', fallbackError);
+			return [];
+		}
 	}
 }
 
