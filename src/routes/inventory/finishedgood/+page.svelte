@@ -1143,7 +1143,7 @@
 			}
 
 			const tableData = [];
-			let totalRp = 0;
+			let totalRp = 0; // Initialize the total
 
 			groupedItems.forEach((item, index) => {
 				const namaBarang = item.nama_finishgood || item.nama_rawmaterial || '-';
@@ -1153,8 +1153,11 @@
 				const quantity = Number(parseFloat(item.quantity) || 0);
 				const satuan = item.satuan || 'PAIL';
 				const harga = Number(parseFloat(item.harga) || 0);
+				
+				// Calculate total for this item (quantity * price)
 				const totalHarga = quantity * harga;
 
+				// Add this item's total to the grand total
 				totalRp += totalHarga;
 
 				console.log(`Processing item ${index + 1}:`, {
@@ -1164,7 +1167,9 @@
 					kemasan,
 					quantity,
 					satuan,
-					totalHarga
+					harga,
+					totalHarga,
+					runningTotal: totalRp
 				});
 
 				tableData.push([
@@ -1193,6 +1198,17 @@
 				]);
 				totalRp = 0.0;
 			}
+
+			console.log('Final calculated totalRp from table items:', totalRp);
+			console.log('Original sjData totals for comparison:', {
+				netto_amount: sjData.netto_amount,
+				harga_setelah_pajak_diskon: sjData.harga_setelah_pajak_diskon,
+				dasar_pengenaan_pajak: sjData.dasar_pengenaan_pajak
+			});
+
+			// Use the same total logic as displayed in Daftar Surat Jalan list
+			const finalTotalRp = sjData.dasar_pengenaan_pajak || sjData.netto_amount || totalRp;
+			console.log('Using finalTotalRp for PDF:', finalTotalRp);
 
 			// Try to use autoTable if available, otherwise use manual table
 			if (doc.autoTable) {
@@ -1239,7 +1255,7 @@
 				doc.setFontSize(10);
 				doc.text('TOTAL RP', 140, finalY + 8);
 				doc.text(':', 165, finalY + 8);
-				doc.text('Rp ' + totalRp.toLocaleString('id-ID'), 175, finalY + 8);
+				doc.text('Rp ' + finalTotalRp.toLocaleString('id-ID'), 175, finalY + 8);
 
 				// Customer delivery info
 				const deliveryY = finalY + 25;
@@ -1330,7 +1346,7 @@
 				doc.setFont('helvetica', 'bold');
 				doc.text('TOTAL RP', 140, currentY + 8);
 				doc.text(':', 165, currentY + 8);
-				doc.text('Rp ' + totalRp.toLocaleString('id-ID'), 175, currentY + 8);
+				doc.text('Rp ' + finalTotalRp.toLocaleString('id-ID'), 175, currentY + 8);
 
 				// Customer delivery info
 				const deliveryY = currentY + 25;
@@ -2866,7 +2882,7 @@
 											{new Intl.NumberFormat('id-ID', {
 												style: 'currency',
 												currency: 'IDR'
-											}).format(sj.netto_amount || 0)}
+											}).format(sj.dasar_pengenaan_pajak || sj.netto_amount || 0)}
 										</td>
 										<td class="px-6 py-4 whitespace-nowrap">
 											<span
@@ -2917,10 +2933,10 @@
 															@ Rp {new Intl.NumberFormat('id-ID').format(sj.harga)}
 														{/if}
 													{/if}
-													{#if sj.total_harga}
+													{#if sj.total_harga || sj.dasar_pengenaan_pajak || sj.netto_amount}
 														<br /><strong
 															>Total: Rp {new Intl.NumberFormat('id-ID').format(
-																sj.total_harga
+																sj.dasar_pengenaan_pajak || sj.netto_amount || sj.total_harga || 0
 															)}</strong
 														>
 													{/if}
