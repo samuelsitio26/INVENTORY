@@ -117,22 +117,22 @@
 		try {
 			console.log('Loading finished goods...');
 			console.log('Base URL: https://directus.eltamaprimaindo.com');
-			
+
 			// Get total count first
 			console.log('Getting total count of finished goods...');
 			const countUrl = 'https://directus.eltamaprimaindo.com/items/finishgood?aggregate[count]=*';
 			console.log('Count request URL:', countUrl);
-			
+
 			const countResponse = await fetch(countUrl, {
 				headers: {
 					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
 				}
 			});
-			
+
 			if (!countResponse.ok) {
 				console.warn('Could not get count, proceeding without count verification');
 			}
-			
+
 			let totalCountInDirectus_temp = 0;
 			try {
 				const countResult = await countResponse.json();
@@ -143,17 +143,17 @@
 			} catch (countError) {
 				console.warn('Count parsing failed:', countError);
 			}
-			
+
 			// Get all finished goods using pagination to ensure we get all data
 			let allFinishedGoods = [];
 			let offset = 0;
 			const limit = 1000; // Use pagination with 1000 items per request
 			let hasMore = true;
-			
+
 			while (hasMore) {
 				const dataUrl = `https://directus.eltamaprimaindo.com/items/finishgood?fields=*&limit=${limit}&offset=${offset}&sort=id`;
 				console.log(`Data request URL (offset ${offset}):`, dataUrl);
-				
+
 				const response = await fetch(dataUrl, {
 					headers: {
 						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
@@ -169,22 +169,27 @@
 				}
 
 				const data = await response.json();
-				console.log(`Batch ${Math.floor(offset/limit) + 1} - received ${data.data?.length || 0} items`);
-				
+				console.log(
+					`Batch ${Math.floor(offset / limit) + 1} - received ${data.data?.length || 0} items`
+				);
+
 				if (data.data && Array.isArray(data.data) && data.data.length > 0) {
 					allFinishedGoods = allFinishedGoods.concat(data.data);
 					offset += limit;
-					
+
 					// Check if we've received fewer items than the limit, indicating last page
 					if (data.data.length < limit) {
 						hasMore = false;
 					}
-					
+
 					// Safety check - if we've loaded as many as the total count, stop
-					if (totalCountInDirectus_temp > 0 && allFinishedGoods.length >= totalCountInDirectus_temp) {
+					if (
+						totalCountInDirectus_temp > 0 &&
+						allFinishedGoods.length >= totalCountInDirectus_temp
+					) {
 						hasMore = false;
 					}
-					
+
 					// Safety check - prevent infinite loop
 					if (offset > 10000) {
 						console.warn('Safety limit reached, stopping pagination');
@@ -193,20 +198,20 @@
 				} else {
 					hasMore = false;
 				}
-				
+
 				console.log(`Total loaded so far: ${allFinishedGoods.length}`);
 			}
-			
+
 			console.log('Finished goods fetch result - Total items loaded:', allFinishedGoods.length);
 			console.log('Received vs Total:', allFinishedGoods.length, '/', totalCountInDirectus);
-			
+
 			// Debug: Log first and last items
 			if (allFinishedGoods.length > 0) {
 				console.log('First finished good item:', allFinishedGoods[0]);
 				console.log('First item keys:', Object.keys(allFinishedGoods[0]));
 				console.log('Last finished good item:', allFinishedGoods[allFinishedGoods.length - 1]);
 			}
-			
+
 			if (!Array.isArray(allFinishedGoods)) {
 				throw new Error('Invalid response format - no data array');
 			}
@@ -217,8 +222,13 @@
 			}));
 
 			console.log('Finished goods processed:', finishedGoods.length);
-			console.log('Total count comparison - Loaded:', finishedGoods.length, 'vs Directus Total:', totalCountInDirectus);
-			
+			console.log(
+				'Total count comparison - Loaded:',
+				finishedGoods.length,
+				'vs Directus Total:',
+				totalCountInDirectus
+			);
+
 			// Debug sample item
 			if (finishedGoods[0]) {
 				console.log('Sample processed item:', {
@@ -626,34 +636,38 @@
 	// Load consumable & sparepart data
 	async function loadConsumableSpareparts() {
 		try {
-			const response = await fetch('https://directus.eltamaprimaindo.com/items/consumable?limit=-1&fields=*', {
-				headers: {
-					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+			const response = await fetch(
+				'https://directus.eltamaprimaindo.com/items/consumable?limit=-1&fields=*',
+				{
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+					}
 				}
-			});
+			);
 
 			if (!response.ok) {
 				throw new Error('Failed to fetch consumable & sparepart data');
 			}
 
 			const data = await response.json();
-			
+
 			// Map the data to match our expected structure
-			consumableSpareparts = data.data?.map(item => ({
-				id: item.id,
-				nama: item.namabarang || '-',
-				kategori: item.kategori || '-',
-				subKategori: item.subkategori || '-',
-				stokIn: parseInt(item.stokmasuk) || 0,
-				stokOut: parseInt(item.stokkeluar) || 0,
-				stokAkhir: parseInt(item.stokakhir) || 0,
-				sisa_stok: parseInt(item.stokakhir) || 0, // Use stokakhir as sisa_stok for consistency
-				status: item.status || '-',
-				moving: item.moving || '-',
-				unit: item.unit || '-',
-				safety: item.safety || '-'
-			})) || [];
-			
+			consumableSpareparts =
+				data.data?.map((item) => ({
+					id: item.id,
+					nama: item.namabarang || '-',
+					kategori: item.kategori || '-',
+					subKategori: item.subkategori || '-',
+					stokIn: parseInt(item.stokmasuk) || 0,
+					stokOut: parseInt(item.stokkeluar) || 0,
+					stokAkhir: parseInt(item.stokakhir) || 0,
+					sisa_stok: parseInt(item.stokakhir) || 0, // Use stokakhir as sisa_stok for consistency
+					status: item.status || '-',
+					moving: item.moving || '-',
+					unit: item.unit || '-',
+					safety: item.safety || '-'
+				})) || [];
+
 			console.log('Consumable & Sparepart data loaded:', consumableSpareparts.length);
 		} catch (err) {
 			console.error('Load Consumable & Sparepart Error:', err);
@@ -675,11 +689,14 @@
 	// Load PO list for selected customer
 	async function loadCustomerPOList(kodeCustomer) {
 		try {
-			const response = await fetch(`https://directus.eltamaprimaindo.com/items/so_customer?filter[kode_customer][_eq]=${kodeCustomer}`, {
-				headers: {
-					'Authorization': 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+			const response = await fetch(
+				`https://directus.eltamaprimaindo.com/items/so_customer?filter[kode_customer][_eq]=${kodeCustomer}`,
+				{
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+					}
 				}
-			});
+			);
 
 			if (!response.ok) {
 				throw new Error('Failed to fetch customer PO data');
@@ -687,8 +704,13 @@
 
 			const data = await response.json();
 			customerPOList = data.data || [];
-			console.log('Customer PO list loaded:', customerPOList.length, 'items for customer:', kodeCustomer);
-			
+			console.log(
+				'Customer PO list loaded:',
+				customerPOList.length,
+				'items for customer:',
+				kodeCustomer
+			);
+
 			// Debug: Check if kode_sales exists in the data
 			if (customerPOList.length > 0) {
 				console.log('Sample PO data:', customerPOList[0]);
@@ -754,7 +776,7 @@
 
 				// Load PO list for this customer
 				await loadCustomerPOList(selectedKode);
-				
+
 				// Reset PO selection when customer changes
 				sjFormData.nomor_po_customer = '';
 				sjFormData.tanggal_po_customer = new Date().toISOString().split('T')[0];
@@ -775,10 +797,10 @@
 	// Function to handle PO selection
 	function handlePOSelection(event) {
 		const selectedPO = event.target.value;
-		
+
 		// Find the selected PO data to validate status
-		const poData = customerPOList.find(po => po.nomor_po_customer === selectedPO);
-		
+		const poData = customerPOList.find((po) => po.nomor_po_customer === selectedPO);
+
 		// Check if PO status is ready
 		if (poData && poData.status === 'ready') {
 			// Reset selection and show warning
@@ -791,7 +813,7 @@
 			setTimeout(() => (toast.show = false), 3000);
 			return;
 		}
-		
+
 		sjFormData.nomor_po_customer = selectedPO;
 
 		// Set the date if available
@@ -802,10 +824,10 @@
 		// Auto-fill kode sales if available
 		console.log('Debugging PO selection - Selected PO:', selectedPO);
 		console.log('Debugging PO selection - Found PO data:', poData);
-		
+
 		if (poData) {
 			console.log('All available fields in PO data:', Object.keys(poData));
-			
+
 			if (poData.kode_sales) {
 				sjFormData.kode_sales = poData.kode_sales;
 				console.log('Autofill kode_sales berhasil:', poData.kode_sales);
@@ -813,18 +835,24 @@
 				// Check for alternative field names
 				const possibleSalesFields = ['sales_code', 'kodeSales', 'sales', 'kode_salesman'];
 				let salesFound = false;
-				
+
 				for (const field of possibleSalesFields) {
 					if (poData[field]) {
 						sjFormData.kode_sales = poData[field];
-						console.log(`Autofill kode_sales berhasil menggunakan field alternatif '${field}':`, poData[field]);
+						console.log(
+							`Autofill kode_sales berhasil menggunakan field alternatif '${field}':`,
+							poData[field]
+						);
 						salesFound = true;
 						break;
 					}
 				}
-				
+
 				if (!salesFound) {
-					console.log('Kode sales tidak ditemukan dalam data PO. Fields tersedia:', Object.keys(poData));
+					console.log(
+						'Kode sales tidak ditemukan dalam data PO. Fields tersedia:',
+						Object.keys(poData)
+					);
 					sjFormData.kode_sales = ''; // Reset if no sales code found
 				}
 			}
@@ -960,7 +988,9 @@
 
 			// Validate items
 			const validItems = sjFormData.items.filter(
-				(item) => (item.finish_good_id || item.raw_material_id || item.consumable_sparepart_id) && item.quantity > 0
+				(item) =>
+					(item.finish_good_id || item.raw_material_id || item.consumable_sparepart_id) &&
+					item.quantity > 0
 			);
 
 			if (validItems.length === 0) {
@@ -991,7 +1021,9 @@
 					}
 				}
 				if (item.consumable_sparepart_id) {
-					const consumable = consumableSpareparts.find((cs) => cs.id === item.consumable_sparepart_id);
+					const consumable = consumableSpareparts.find(
+						(cs) => cs.id === item.consumable_sparepart_id
+					);
 					if (consumable && consumable.sisa_stok < item.quantity) {
 						insufficientStock = true;
 						stockErrors.push(
@@ -1081,7 +1113,9 @@
 				}
 
 				if (item.consumable_sparepart_id && item.quantity > 0) {
-					const consumable = consumableSpareparts.find((cs) => cs.id === item.consumable_sparepart_id);
+					const consumable = consumableSpareparts.find(
+						(cs) => cs.id === item.consumable_sparepart_id
+					);
 					if (consumable) {
 						const newStock = Math.max(0, consumable.sisa_stok - item.quantity);
 						await updateConsumableStock(item.consumable_sparepart_id, newStock);
@@ -1225,10 +1259,10 @@
 				}
 			]
 		};
-		
+
 		// Reset customer PO list
 		customerPOList = [];
-		
+
 		showSJForm = true;
 	}
 
@@ -1260,479 +1294,490 @@
 		showSJList = false;
 	}
 
-	// Function to print Surat Jalan
+	// Function to print Surat Jalan dengan format 9x11 inci yang lebih rapi
 	async function printSuratJalan(sjData) {
 		try {
-			console.log('printSuratJalan called with data:', sjData);
-			console.log('suratJalanList:', suratJalanList);
-			console.log('sjFormData:', sjFormData);
+			console.log('Creating Delivery Order PDF with data:', sjData);
 
-			// Calculate dynamic page height based on content - optimized for compact layout
-			let estimatedHeight = 90; // Reduced base height for header and customer info
-			
-			// Get item count for height calculation - default minimum 5 items
-			let itemCount = 5; // Default minimum 5 items untuk space yang cukup
-			if (sjData.items && Array.isArray(sjData.items)) {
-				itemCount = Math.max(sjData.items.length, 5); // Minimal 5 items
-			} else if (sjFormData && sjFormData.items) {
-				itemCount = Math.max(sjFormData.items.length, 5); // Minimal 5 items
-			} else if (suratJalanList && suratJalanList.length > 0) {
-				const matchingItems = suratJalanList.filter(item => item.nomor_sj === sjData.nomor_sj);
-				itemCount = Math.max(matchingItems.length || 1, 5); // Minimal 5 items
-			}
-			
-			// Add height for table: header (8mm) + items (6mm each) + spacing (compact)
-			estimatedHeight += 8 + (itemCount * 6) + 10;
-			
-			// Add height for footer sections: total (10mm) + delivery (12mm) + note (8mm) + signatures (50mm) - INCREASED signature space significantly
-			estimatedHeight += 80;
-			
-			// Create PDF with landscape orientation (width: A4 height, height: dynamic)
-			const pageHeight = Math.max(estimatedHeight, 220); // INCREASED minimum height from 180 to 220mm
+			// Create PDF dengan ukuran 9x11 inci (648 x 792 points)
 			const doc = new jsPDF({
-				unit: 'mm',
-				orientation: 'landscape',
-				format: [297, pageHeight] // 297mm width (A4 landscape), dynamic height
+				orientation: 'portrait',
+				unit: 'pt',
+				format: [648, 792]
 			});
 
-			// Set font
-			doc.setFont('helvetica');
-
-			// Add Company Logo
+			// Load logo
+			let logoDataUrl = null;
 			try {
-				// Load logo from static folder
+				console.log('Loading logo...');
 				const logoResponse = await fetch('/Logo-Eltama-Prima-Indo-01.png');
 				if (logoResponse.ok) {
 					const logoBlob = await logoResponse.blob();
-					const logoBase64 = await new Promise((resolve) => {
+					logoDataUrl = await new Promise((resolve) => {
 						const reader = new FileReader();
 						reader.onload = () => resolve(reader.result);
 						reader.readAsDataURL(logoBlob);
 					});
-					// Add logo to PDF
-					doc.addImage(logoBase64, 'PNG', 15, 15, 25, 25); // x, y, width, height
-				} else {
-					console.warn('Logo file not found, using text placeholder');
-					doc.setFontSize(8);
-					doc.setFont('helvetica', 'normal');
-					doc.text('[LOGO]', 15, 25);
+					console.log('Logo loaded successfully');
 				}
-			} catch (error) {
-				console.error('Error loading logo:', error);
-				// Fallback to text if logo fails to load
-				doc.setFontSize(8);
-				doc.setFont('helvetica', 'normal');
-				doc.text('[LOGO]', 15, 25);
+			} catch (logoError) {
+				console.warn('Could not load logo:', logoError);
 			}
 
-			// Company Header - adjusted for logo space and landscape orientation
-			doc.setFontSize(16);
+			// Set font dan warna utama #0D3E75
+			doc.setTextColor(13, 62, 117);
+
+			// HEADER SECTION - Company info in bordered box (kiri) dan Delivery Order title (kanan)
+			// Company info box with border - diperkecil agar lebih rapat
+			doc.setLineWidth(1);
+			doc.rect(110, 40, 240, 70); // Digeser ke kanan lagi dari 90 ke 110
+
+			// Add logo jika tersedia
+			if (logoDataUrl) {
+				doc.addImage(logoDataUrl, 'PNG', 115, 45, 30, 30);
+			}
+
+			// Company name dengan dotted line
+			doc.setFontSize(14);
 			doc.setFont('helvetica', 'bold');
-			doc.text('PT. ELTAMA PRIMA INDO', 148, 20, { align: 'center' });
+			doc.text('PT ELTAMA PRIMA INDO', 155, 60);
 
-			doc.setFontSize(9);
-			doc.setFont('helvetica', 'normal');
-			doc.text('Jl. Raya Parpostel Gang Nangka RT. 02 RW. 03', 148, 28, { align: 'center' });
-			doc.text('No 88 Kel. Bojong Kulur Kec. Gunung Putri', 148, 34, { align: 'center' });
-			doc.text('Bogor, Ja-Bar 021-82745454', 148, 40, { align: 'center' });
-
-			// Draw separator line - extended for landscape
+			// Dotted line under company name - disesuaikan dengan box yang lebih kecil
 			doc.setLineWidth(0.5);
-			doc.line(14, 45, 283, 45);
+			doc.setLineDashPattern([2, 2], 0);
+			doc.line(155, 65, 340, 65); // Digeser ke kanan lagi dari 135 ke 155, dan dari 320 ke 340
+			doc.setLineDashPattern([], 0);
 
-			// Customer section - redesigned layout dengan space yang cukup
-			doc.setLineWidth(0.3);
-			
-			// Left box for customer info - ukuran lebih kecil
-			doc.rect(14, 50, 100, 35); // Customer info box - dikurangi lebar
-			
+			// Company address
+			doc.setFontSize(11);
+			doc.setFont('helvetica', 'normal');
+			doc.text('Jalan Raya Parpostel Gang Nangka', 155, 80);
+			doc.text('RT 02 RW 03 No 88, Kel. Bolong Kuiur', 155, 92);
+			doc.text('Kec. Gunung Putri, Bogor Jawa Barat', 155, 104);
+
+			// DELIVERY ORDER TITLE (kanan atas)
+			doc.setFontSize(24);
+			doc.setFont('helvetica', 'normal');
+			doc.text('Delivery Order', 580, 80, { align: 'right' });
+
+			// BILL TO / SHIP TO SECTION
+			const billToY = 140;
+
+			// Bill To dan Ship To labels (kiri)
+			doc.setFontSize(11);
+			doc.setFont('helvetica', 'normal');
+			doc.text('Bill To :', 40, billToY + 18);
+			doc.text('Ship To :', 40, billToY + 58);
+
+			// Customer info box dengan border dan dotted separator - diperkecil agar lebih rapat
+			doc.setLineWidth(1);
+			doc.rect(110, billToY, 300, 80); // Diperkecil dari 350 ke 300
+
+			// Bill To section (atas)
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(11);
+			doc.text(`${sjData.nama_customer || ''}`, 120, billToY + 18);
+
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(10);
+			doc.text('Jl. Raya Pasar Minggu KM 18, Pejaten Barat - Pasar Minggu, ', 120, billToY + 32);
+			doc.text('Jakarta Selatan 12610', 120, billToY + 44);
+
+			// Dotted line separator horizontal - disesuaikan dengan box yang lebih kecil
+			doc.setLineWidth(0.5);
+			doc.setLineDashPattern([2, 2], 0);
+			doc.line(120, billToY + 50, 400, billToY + 50); // Diperpendek dari 450 ke 400
+			doc.setLineDashPattern([], 0);
+
+			// Ship To section (bawah)
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(10);
+			const shipToText = sjData.alamat_pengiriman || sjData.alamat_customer || '';
+			if (shipToText) {
+				const shipToLines = doc.splitTextToSize(shipToText, 270); // Diperkecil dari 320 ke 270
+				doc.text(shipToLines, 120, billToY + 65);
+			}
+
+			// RIGHT INFO TABLE
+			const infoTableX = 480;
+			const infoTableY = billToY;
+			const tableWidth = 140;
+			const tableHeight = 80;
+
+			// Main table border
+			doc.setLineWidth(1);
+			doc.rect(infoTableX, infoTableY, tableWidth, tableHeight);
+
+			// Internal table divisions
+			doc.line(infoTableX, infoTableY + 35, infoTableX + tableWidth, infoTableY + 35); // Horizontal middle
+			doc.line(infoTableX + 70, infoTableY, infoTableX + 70, infoTableY + tableHeight); // Vertical middle
+
 			doc.setFontSize(9);
 			doc.setFont('helvetica', 'normal');
-			doc.text('Kepada Yth.', 16, 56);
 
-			// Customer info with compact spacing
+			// Top left: Delivery Date
+			doc.text('Delivery Date', infoTableX + 5, infoTableY + 12);
 			doc.setFont('helvetica', 'bold');
-			doc.text(`${sjData.kode_customer || 'CUSTOMER'}`, 16, 62);
+			const deliveryDate = sjData.tgl_sj
+				? new Date(sjData.tgl_sj).toLocaleDateString('id-ID')
+				: new Date().toLocaleDateString('id-ID');
+			doc.text(deliveryDate, infoTableX + 5, infoTableY + 25);
+
+			// Top right: Delivery No
 			doc.setFont('helvetica', 'normal');
+			doc.text('Delivery No', infoTableX + 75, infoTableY + 12);
+			doc.setFont('helvetica', 'bold');
 			doc.setFontSize(8);
-			doc.text(`${sjData.nama_customer || 'PT. MOWILEX INDONESIA'}`, 16, 67);
-			doc.text('Jl. Daan Mogot Raya KM. 10 No. 2A', 16, 72);
-			doc.text('RT.001/008, Kedaung-Kaliangke', 16, 77);
-			doc.text('Cengkareng - Jakarta Barat, 11710', 16, 82);
+			const deliveryNo =
+				sjData.nomor_sj ||
+				`SJ/${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}/${String(new Date().getDate()).padStart(2, '0')}`;
+			doc.text(deliveryNo, infoTableX + 75, infoTableY + 25);
 
-			// Right box for document info - digeser lebih ke kanan dengan space
-			doc.rect(125, 50, 158, 35); // Document info box - digeser ke kanan, lebar ditambah
-			
-			doc.setFontSize(9);
+			// Bottom left: Ship Via
 			doc.setFont('helvetica', 'normal');
-			const rightX = 127; // Posisi lebih ke kanan
-			const colonX = rightX + 35; // Space untuk label yang lebih panjang
-			const valueX = colonX + 5;
+			doc.setFontSize(9);
+			doc.text('Ship Via', infoTableX + 5, infoTableY + 50);
 
-			doc.text('Nomor', rightX, 56);
-			doc.text(':', colonX, 56);
-			doc.text(sjData.nomor_sj || 'SJ/2025/01/0001', valueX, 56);
-
-			doc.text('Tanggal', rightX, 62);
-			doc.text(':', colonX, 62);
-			doc.text(
-				sjData.tgl_sj ? new Date(sjData.tgl_sj).toLocaleDateString('id-ID') : '29/7/2025',
-				valueX,
-				62
-			);
-
-			doc.text('No. Kendaraan', rightX, 68);
-			doc.text(':', colonX, 68);
-			doc.text(sjData.no_kendaraan || '1231', valueX, 68);
-
-			doc.text('Sopir / Kernet', rightX, 74);
-			doc.text(':', colonX, 74);
-			doc.text(sjData.nama_sopir || 'ANIRIBU', valueX, 74);
-
-			doc.text('No. PO', rightX, 80);
-			doc.text(':', colonX, 80);
-			doc.text(sjData.no_po || '123456', valueX, 80);
-
-			// Hapus vertical divider karena tidak perlu lagi
-
-			// SURAT JALAN title - compact positioning
-			doc.setFontSize(16);
+			// Bottom right: PO No
+			doc.text('PO. No.', infoTableX + 75, infoTableY + 50);
 			doc.setFont('helvetica', 'bold');
-			doc.text('SURAT JALAN', 148, 95, { align: 'center' });
+			doc.setFontSize(8);
+			const poNo = sjData.nomor_po_customer || sjData.no_po || '-';
+			doc.text(poNo, infoTableX + 75, infoTableY + 63);
 
-			// Table headers and data - Simplified columns without warna
-			const headers = [
-				['No.', 'NAMA BARANG', 'KEMASAN', 'QTY', 'SATUAN', 'Total KG']
-			];
+			// PRY text tepat di bawah tabel info (di luar box)
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(10);
+			doc.text('PRY', infoTableX + tableWidth / 2, infoTableY + tableHeight + 15, {
+				align: 'center'
+			});
 
-			// Create table data - group items with same nomor_sj
+			// MAIN TABLE
+			const mainTableY = 250;
+			const mainTableWidth = 580;
+			const colWidths = [80, 320, 60, 120]; // Item, Description, Qty, Serial Number
+
+			// Table header
+			doc.setLineWidth(1);
+			doc.rect(40, mainTableY, mainTableWidth, 25);
+
+			// Header column separators
+			let currentX = 40;
+			for (let i = 0; i < colWidths.length - 1; i++) {
+				currentX += colWidths[i];
+				doc.line(currentX, mainTableY, currentX, mainTableY + 25);
+			}
+
+			// Header text
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(11);
+			doc.text('Item', 80, mainTableY + 16, { align: 'center' });
+			doc.text('Item Description', 280, mainTableY + 16, { align: 'center' });
+			doc.text('Qty', 480, mainTableY + 16, { align: 'center' });
+			doc.text('Serial Number', 560, mainTableY + 16, { align: 'center' });
+
+			// Prepare table data
 			let groupedItems = [];
+
+			console.log('=== DEBUGGING PRINT SURAT JALAN ===');
+			console.log('sjData received:', sjData);
+			console.log('sjFormData.items:', sjFormData.items);
+			console.log('suratJalanList:', suratJalanList);
+			console.log(
+				'finishedGoods with selection:',
+				finishedGoods?.slice(0, 3).map((item) => ({ id: item.id, selected: item.selected }))
+			);
 
 			console.log('Preparing groupedItems...');
 
-			// If printing from list, get items from suratJalanList
-			if (suratJalanList && suratJalanList.length > 0) {
-				// Check if we have items in sjData.items or need to fetch them
-				if (sjData.items && Array.isArray(sjData.items)) {
-					groupedItems = sjData.items.map((item) => ({
-						...item,
-						quantity: parseFloat(item.quantity) || 0
-					}));
-					console.log('Using sjData.items:', groupedItems);
-				} else {
-					// If no items in sjData, try to find items by nomor_sj in suratJalanList
-					// This assumes items might be stored separately with nomor_sj reference
-					groupedItems = suratJalanList
-						.filter(
-							(item) =>
-								item.nomor_sj === sjData.nomor_sj &&
-								(item.nama_finishgood || item.nama_rawmaterial) &&
-								item.quantity
-						)
-						.map((item) => ({
-							...item,
-							quantity: parseFloat(item.quantity) || 0
-						}));
-					console.log('Using suratJalanList filtered items:', groupedItems);
+			// Cek semua sumber data secara berurutan
+			console.log('=== CHECKING DATA SOURCES ===');
+			console.log('1. sjData.items exists:', !!(sjData.items && sjData.items.length > 0));
+			console.log(
+				'2. sjFormData.items exists:',
+				!!(sjFormData.items && sjFormData.items.length > 0)
+			);
+			console.log('3. suratJalanList exists:', !!(suratJalanList && suratJalanList.length > 0));
+			console.log('4. finishedGoods exists:', !!(finishedGoods && finishedGoods.length > 0));
+
+			// Prioritas 1: Ambil dari tempSJData.items (dari printAfterSave)
+			if (sjData.items && sjData.items.length > 0) {
+				console.log('✅ Using sjData.items from form:', sjData.items);
+				console.log('First sjData item structure:', sjData.items[0]);
+
+				// Filter lebih fleksibel - cek berbagai kemungkinan field ID
+				const validItems = sjData.items.filter((item) => {
+					const hasId =
+						item.finish_good_id ||
+						item.raw_material_id ||
+						item.consumable_sparepart_id ||
+						item.id ||
+						item.kode_barang ||
+						item.nama_barang;
+					console.log('sjData Item validation:', { item, hasId });
+					return hasId;
+				});
+
+				console.log('Valid sjData items after filter:', validItems);
+
+				groupedItems = validItems.map((item) => ({
+					kode_barang:
+						item.finish_good_id ||
+						item.raw_material_id ||
+						item.consumable_sparepart_id ||
+						item.kode_barang ||
+						item.id ||
+						'-',
+					nama_finishgood:
+						item.finish_good_name ||
+						item.raw_material_name ||
+						item.consumable_sparepart_name ||
+						item.nama_barang ||
+						item.nama_finishgood ||
+						'-',
+					quantity: item.quantity || 0,
+					satuan: item.satuan || 'PAIL'
+				}));
+			}
+
+			// Prioritas 2: Ambil dari sjFormData.items (item yang dipilih di form)
+			if (groupedItems.length === 0 && sjFormData.items && sjFormData.items.length > 0) {
+				console.log('✅ Using sjFormData.items:', sjFormData.items);
+				console.log('First item structure:', sjFormData.items[0]);
+
+				// Filter lebih fleksibel - cek berbagai kemungkinan field ID
+				const validItems = sjFormData.items.filter((item) => {
+					const hasId =
+						item.finish_good_id ||
+						item.raw_material_id ||
+						item.consumable_sparepart_id ||
+						item.id ||
+						item.kode_barang ||
+						item.nama_barang;
+					console.log('Item validation:', { item, hasId });
+					return hasId;
+				});
+
+				console.log('Valid items after filter:', validItems);
+
+				groupedItems = validItems.map((item) => ({
+					kode_barang:
+						item.finish_good_id ||
+						item.raw_material_id ||
+						item.consumable_sparepart_id ||
+						item.kode_barang ||
+						item.id ||
+						'-',
+					nama_finishgood:
+						item.finish_good_name ||
+						item.raw_material_name ||
+						item.consumable_sparepart_name ||
+						item.nama_barang ||
+						item.nama_finishgood ||
+						'-',
+					quantity: item.quantity || 0,
+					satuan: item.satuan || 'PAIL'
+				}));
+			}
+
+			// Prioritas 3: Get items dari suratJalanList (jika print dari list)
+			if (groupedItems.length === 0 && suratJalanList && suratJalanList.length > 0) {
+				console.log('✅ Using suratJalanList data');
+				const filteredSJ = suratJalanList.filter((sj) => sj.nomor_sj === sjData.nomor_sj);
+				if (filteredSJ.length > 0) {
+					groupedItems =
+						filteredSJ[0].items?.map((item) => ({
+							kode_barang: item.kode_barang || '-',
+							nama_finishgood: item.nama_finishgood || item.nama_rawmaterial || '-',
+							quantity: item.quantity || 0,
+							satuan: item.satuan || 'PAIL'
+						})) || [];
 				}
 			}
-			// If printing from form (after save), use form data
-			else if (sjFormData && sjFormData.items) {
-				groupedItems = sjFormData.items
-					.filter((item) => (item.finish_good_id || item.raw_material_id) && item.quantity > 0)
+
+			// Prioritas 4: Ambil dari finishedGoods yang dipilih (fallback)
+			if (groupedItems.length === 0 && finishedGoods && finishedGoods.length > 0) {
+				console.log('✅ Using finishedGoods data');
+				groupedItems = finishedGoods
+					.filter((item) => item.selected)
 					.map((item) => ({
-						kode_barang: item.kode_barang || item.finish_good_id || item.raw_material_id,
-						nama_finishgood: item.finish_good_name,
-						nama_rawmaterial: item.raw_material_name,
-						warna: item.warna || '',
-						kemasan: item.kemasan || '',
-						quantity: parseFloat(item.quantity) || 0, // Ensure quantity is a number
-						satuan: item.satuan || 'PAIL',
-						harga: item.harga || 0,
-						total_harga: item.total_harga || 0
+						kode_barang: item.kode_barang || '-',
+						nama_finishgood: item.nama_finishgood || item.nama_rawmaterial || '-',
+						quantity: item.quantity || 0,
+						satuan: item.satuan || 'PAIL'
 					}));
-				console.log('Using sjFormData, mapped items:', groupedItems);
 			}
 
 			console.log('Final groupedItems:', groupedItems);
+			console.log('GroupedItems length:', groupedItems.length);
 
-			if (!groupedItems || groupedItems.length === 0) {
-				console.warn('No items found for printing, creating placeholder item');
-				// Create a placeholder item if no items found
-				groupedItems = [
-					{
-						nama_finishgood: 'OX 9250 20 CLEAR',
-						nama_rawmaterial: '',
-						kemasan: 'PAIL',
-						quantity: 2.0,
-						satuan: 'PAIL'
-					}
-				];
+			// Jika tidak ada data yang dipilih, tampilkan pesan error
+			if (groupedItems.length === 0) {
+				console.error('Tidak ada item yang dipilih untuk dicetak');
+				console.error('Debug info - sjData:', sjData);
+				console.error('Debug info - sjFormData.items:', sjFormData.items);
+				console.error('Debug info - sjFormData.items[0]:', sjFormData.items?.[0]);
+				console.error('Debug info - sjData.items:', sjData.items);
+				console.error('Debug info - suratJalanList:', suratJalanList);
+				console.error(
+					'Debug info - finishedGoods selected:',
+					finishedGoods?.filter((item) => item.selected)
+				);
+
+				// Coba paksa menggunakan data yang ada tanpa filter ketat
+				if (sjFormData.items && sjFormData.items.length > 0) {
+					console.warn('Forcing use of sjFormData.items without strict filter');
+					groupedItems = sjFormData.items.map((item, index) => ({
+						kode_barang:
+							item.finish_good_id ||
+							item.raw_material_id ||
+							item.consumable_sparepart_id ||
+							item.kode_barang ||
+							item.id ||
+							`ITEM-${index + 1}`,
+						nama_finishgood:
+							item.finish_good_name ||
+							item.raw_material_name ||
+							item.consumable_sparepart_name ||
+							item.nama_barang ||
+							item.nama_finishgood ||
+							`Item ${index + 1}`,
+						quantity: item.quantity || 1,
+						satuan: item.satuan || 'PAIL'
+					}));
+				} else if (sjData.items && sjData.items.length > 0) {
+					console.warn('Forcing use of sjData.items without strict filter');
+					groupedItems = sjData.items.map((item, index) => ({
+						kode_barang:
+							item.finish_good_id ||
+							item.raw_material_id ||
+							item.consumable_sparepart_id ||
+							item.kode_barang ||
+							item.id ||
+							`ITEM-${index + 1}`,
+						nama_finishgood:
+							item.finish_good_name ||
+							item.raw_material_name ||
+							item.consumable_sparepart_name ||
+							item.nama_barang ||
+							item.nama_finishgood ||
+							`Item ${index + 1}`,
+						quantity: item.quantity || 1,
+						satuan: item.satuan || 'PAIL'
+					}));
+				}
+
+				// Jika masih kosong setelah paksa, baru return error
+				if (groupedItems.length === 0) {
+					alert('Tidak ada data item yang dapat digunakan untuk mencetak Surat Jalan');
+					return;
+				}
+
+				console.log('Forced groupedItems:', groupedItems);
 			}
 
-			const tableData = [];
-			let totalKg = 0; // Initialize the total KG
+			// Table rows
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(10);
+			let currentY = mainTableY + 25;
 
 			groupedItems.forEach((item, index) => {
-				const namaBarang = item.nama_finishgood || item.nama_rawmaterial || '-';
-				const kemasan = item.kemasan || '-';
-				const quantity = Number(parseFloat(item.quantity) || 0);
-				const satuan = item.satuan || 'PAIL';
-				
-				// Calculate total KG for this item (quantity * 1, assuming each unit = 1 KG)
-				// You can modify this calculation based on your business logic
-				const totalKgItem = quantity; // Assuming 1 unit = 1 KG
+				const rowHeight = 30;
 
-				// Add this item's total to the grand total
-				totalKg += totalKgItem;
+				// Row border
+				doc.rect(40, currentY, mainTableWidth, rowHeight);
 
-				console.log(`Processing item ${index + 1}:`, {
-					namaBarang,
-					kemasan,
-					quantity,
-					satuan,
-					totalKgItem,
-					runningTotal: totalKg
-				});
+				// Column separators
+				let currentX = 40;
+				for (let i = 0; i < colWidths.length - 1; i++) {
+					currentX += colWidths[i];
+					doc.line(currentX, currentY, currentX, currentY + rowHeight);
+				}
 
-				tableData.push([
-					(index + 1).toString(),
-					namaBarang,
-					kemasan,
-					quantity.toString(),
-					satuan,
-					totalKgItem.toFixed(2)
-				]);
+				// Row data
+				doc.text(item.kode_barang, 50, currentY + 18);
+
+				// Item description dengan text wrapping
+				const description = item.nama_finishgood;
+				if (description.length > 40) {
+					const lines = doc.splitTextToSize(description, 300);
+					doc.text(lines[0], 130, currentY + 12);
+					if (lines[1]) {
+						doc.text(lines[1], 130, currentY + 24);
+					}
+				} else {
+					doc.text(description, 130, currentY + 18);
+				}
+
+				doc.text(item.quantity.toString(), 480, currentY + 18, { align: 'center' });
+				doc.text('', 560, currentY + 18); // Serial Number - kosong
+
+				currentY += rowHeight;
 			});
 
-			// Pastikan minimal 5 baris untuk tampilan yang konsisten
-			while (tableData.length < 5) {
-				tableData.push([
-					(tableData.length + 1).toString(),
-					'-',
-					'-',
-					'0',
-					'-',
-					'0.00'
-				]);
+			// SIGNATURE SECTION - dengan ruang tanda tangan yang lebih besar
+			const signatureY = currentY + 40;
+			const signatureBoxes = [
+				{ label: 'Prepared By', x: 40, width: 100 },
+				{ label: 'Approved By', x: 150, width: 100 },
+				{ label: 'Shipped By', x: 260, width: 100 },
+				{ label: 'Received By', x: 370, width: 100 }
+			];
+
+			// Signature boxes dengan ruang tanda tangan yang lebih besar
+			signatureBoxes.forEach((box) => {
+				doc.setFont('helvetica', 'normal');
+				doc.setFontSize(11);
+				doc.text(box.label, box.x + box.width / 2, signatureY, { align: 'center' });
+
+				// Signature line dengan jarak yang lebih jauh untuk ruang tanda tangan
+				doc.setLineWidth(1);
+				doc.line(box.x, signatureY + 45, box.x + box.width, signatureY + 45); // Dipindah dari +30 ke +45
+
+				// Date label ditempatkan lebih jauh ke bawah
+				doc.setFontSize(9);
+				doc.text('Date:', box.x, signatureY + 60); // Dipindah dari +45 ke +60
+			});
+
+			// Description box (kanan) - disesuaikan dengan posisi signature yang baru
+			const descBoxX = 480;
+			const descBoxY = signatureY - 15;
+			const descBoxWidth = 140;
+			const descBoxHeight = 75; // Diperbesar sedikit untuk menyesuaikan dengan signature yang lebih tinggi
+
+			doc.setLineWidth(1);
+			doc.rect(descBoxX, descBoxY, descBoxWidth, descBoxHeight);
+
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(11);
+			doc.text('Description:', descBoxX + 5, descBoxY + 15);
+
+			doc.setFontSize(9);
+			const poText = sjData.nomor_po_customer || sjData.no_po || '';
+
+			// Text dengan word wrapping untuk memastikan tidak keluar dari box
+			if (poText) {
+				const pryText = `${poText} PRY`;
+				const pryLines = doc.splitTextToSize(pryText, descBoxWidth - 10);
+				doc.text(pryLines, descBoxX + 5, descBoxY + 30);
 			}
 
-			console.log('Final calculated totalKg from table items:', totalKg);
-
-			// Use totalKg as the final total
-			const finalTotalKg = totalKg;
-			console.log('Using finalTotalKg for PDF:', finalTotalKg);
-
-			// Try to use autoTable if available, otherwise use manual table
-			if (doc.autoTable) {
-				// Add table with better styling - compact layout for landscape
-				doc.autoTable({
-					head: headers,
-					body: tableData,
-					startY: 102, // Moved up for compact layout
-					theme: 'grid',
-					styles: {
-						fontSize: 9, // Slightly smaller font
-						cellPadding: 3, // Reduced padding
-						lineColor: [0, 0, 0],
-						lineWidth: 0.1
-					},
-					headStyles: {
-						fillColor: [240, 240, 240], // Light gray background
-						textColor: [0, 0, 0],
-						fontStyle: 'bold',
-						halign: 'center'
-					},
-					columnStyles: {
-						0: { cellWidth: 18, halign: 'center' }, // No. - compact
-						1: { cellWidth: 130, halign: 'left' }, // NAMA BARANG - maximized
-						2: { cellWidth: 35, halign: 'center' }, // KEMASAN - compact
-						3: { cellWidth: 25, halign: 'center' }, // QTY - compact
-						4: { cellWidth: 30, halign: 'center' }, // SATUAN - compact
-						5: { cellWidth: 30, halign: 'center' } // Total KG - compact
-					},
-					margin: { left: 14, right: 14 }
-				});
-
-				// Total row - calculate position after table
-				const finalY = doc.lastAutoTable
-					? doc.lastAutoTable.finalY + 5
-					: 135 + tableData.length * 12;
-
-				// Total KG section with better formatting - extended for landscape
-				doc.setLineWidth(0.5);
-				doc.line(14, finalY, 283, finalY);
-				doc.setFont('helvetica', 'bold');
-				doc.setFontSize(10);
-				doc.text('TOTAL KG', 220, finalY + 8);
-				doc.text(':', 245, finalY + 8);
-				doc.text(finalTotalKg.toFixed(2), 255, finalY + 8);
-
-				// Customer delivery info - compact
-				const deliveryY = finalY + 12; // Reduced spacing further
-				doc.setFont('helvetica', 'normal');
-				doc.setFontSize(9);
-				doc.text(
-					`Kirim ke : ${sjData.nama_customer || sjData.kode_customer || 'PT. MOWILEX INDONESIA'}`,
-					14,
-					deliveryY
-				);
-
-				// Note section - compact
-				doc.setFont('helvetica', 'bold');
-				doc.text('NB.', 14, deliveryY + 6); // Reduced spacing
-				doc.setFont('helvetica', 'normal');
-				doc.text('KIRIM KE CUSTOMER', 30, deliveryY + 6);
-
-				// Signature section - layout diperbaiki dengan garis bawah yang jelas
-				const signY = deliveryY + 18; // Reduced spacing for more room
-				doc.setFontSize(9);
-				doc.setFont('helvetica', 'normal');
-
-				// Signature labels - dengan spacing yang lebih baik untuk landscape
-				doc.text('STEMPLE & Ttd PENERIMA', 15, signY);
-				doc.text('SOPIR', 85, signY);
-				doc.text('DIPERIKSA OLEH', 155, signY);
-				doc.text('HORMAT KAMI', 225, signY);
-
-				// Ensure drawing color and stroke is properly set
-				doc.setDrawColor(0, 0, 0); // Black color
-				doc.setFillColor(0, 0, 0); // Black fill
-
-				// Single signature underlines - garis bawah yang tebal dan jelas
-				const lineY = signY + 20; // Spacing for signature lines
-				doc.setLineWidth(1.0); // Thick lines untuk visibility
-				
-				// Draw signature lines
-				doc.line(15, lineY, 80, lineY); // STEMPLE & Ttd PENERIMA - 65mm
-				doc.line(85, lineY, 145, lineY); // SOPIR - 60mm
-				doc.line(155, lineY, 215, lineY); // DIPERIKSA OLEH - 60mm
-				doc.line(225, lineY, 280, lineY); // HORMAT KAMI - 55mm
-
-				// Labels untuk nama di bawah garis
-				doc.setFont('helvetica', 'normal');
-				doc.setFontSize(7);
-				doc.text('( )', 40, lineY + 8); // STEMPLE & Ttd PENERIMA
-				doc.text('( )', 110, lineY + 8); // SOPIR
-				doc.text('( )', 180, lineY + 8); // DIPERIKSA OLEH
-				doc.text('( )', 250, lineY + 8); // HORMAT KAMI
-			} else {
-				// Manual table drawing if autoTable is not available - compact layout
-				let currentY = 102; // Moved up for compact layout
-
-				// Draw table headers
-				doc.setFontSize(8);
-				doc.setFont('helvetica', 'bold');
-
-				// Header border - extended for landscape with gray background
-				doc.setLineWidth(0.5);
-				doc.setFillColor(240, 240, 240); // Light gray
-				doc.rect(14, currentY - 5, 269, 10, 'FD'); // Fill and draw
-
-				// Header text for 6 columns - repositioned for landscape
-				doc.setTextColor(0, 0, 0); // Black text
-				doc.text('No.', 18, currentY);
-				doc.text('NAMA BARANG', 35, currentY);
-				doc.text('KEMASAN', 170, currentY);
-				doc.text('QTY', 215, currentY);
-				doc.text('SATUAN', 235, currentY);
-				doc.text('Total KG', 265, currentY);
-
-				currentY += 8;
-
-				// Draw table rows
-				doc.setFont('helvetica', 'normal');
-				doc.setFillColor(255, 255, 255); // White background for rows
-				tableData.forEach((row, index) => {
-					// Row border - extended for landscape with alternating colors
-					if (index % 2 === 0) {
-						doc.setFillColor(250, 250, 250); // Very light gray for even rows
-					} else {
-						doc.setFillColor(255, 255, 255); // White for odd rows
-					}
-					doc.rect(14, currentY - 3, 269, 8, 'FD'); // Reduced height for compact layout
-
-					doc.setFontSize(8); // Smaller font for compact layout
-					doc.text(row[0], 18, currentY + 1); // No.
-					doc.text(row[1], 35, currentY + 1); // NAMA BARANG
-					doc.text(row[2], 170, currentY + 1); // KEMASAN
-					doc.text(row[3], 215, currentY + 1); // QTY
-					doc.text(row[4], 235, currentY + 1); // SATUAN
-					doc.text(row[5], 265, currentY + 1); // TOTAL KG
-					currentY += 8; // Reduced spacing
-				});
-
-				// Total row - compact layout
-				currentY += 3; // Reduced spacing
-				doc.setLineWidth(0.5);
-				doc.line(14, currentY, 283, currentY);
-				doc.setFont('helvetica', 'bold');
-				doc.setFontSize(9);
-				doc.text('TOTAL KG', 220, currentY + 6);
-				doc.text(':', 245, currentY + 6);
-				doc.text(finalTotalKg.toFixed(2), 255, currentY + 6);
-
-				// Customer delivery info - compact
-				const deliveryY = currentY + 12; // Reduced spacing further
-				doc.setFont('helvetica', 'normal');
-				doc.setFontSize(9);
-				doc.text(
-					`Kirim ke : ${sjData.nama_customer || sjData.kode_customer || 'PT. MOWILEX INDONESIA'}`,
-					14,
-					deliveryY
-				);
-
-				// Note section - compact
-				doc.setFont('helvetica', 'bold');
-				doc.text('NB.', 14, deliveryY + 6); // Reduced spacing
-				doc.setFont('helvetica', 'normal');
-				doc.text('KIRIM KE CUSTOMER', 30, deliveryY + 6);
-
-				// Signature section - layout diperbaiki dengan space yang cukup (manual table)
-				const signY = deliveryY + 18; // Reduced spacing for more room
-				doc.setFontSize(9);
-				doc.setFont('helvetica', 'normal');
-
-				// Signature labels - dengan spacing yang lebih baik untuk landscape
-				doc.text('STEMPLE & Ttd PENERIMA', 15, signY);
-				doc.text('SOPIR', 85, signY);
-				doc.text('DIPERIKSA OLEH', 155, signY);
-				doc.text('HORMAT KAMI', 225, signY);
-
-				// Ensure drawing color and stroke is properly set
-				doc.setDrawColor(0, 0, 0); // Black color
-				doc.setFillColor(0, 0, 0); // Black fill
-
-				// Single signature underlines - garis bawah yang tebal dan jelas
-				const lineY = signY + 20; // Spacing for signature lines
-				doc.setLineWidth(1.0); // Thick lines untuk visibility
-				
-				// Draw signature lines
-				doc.line(15, lineY, 80, lineY); // STEMPLE & Ttd PENERIMA - 65mm
-				doc.line(85, lineY, 145, lineY); // SOPIR - 60mm
-				doc.line(155, lineY, 215, lineY); // DIPERIKSA OLEH - 60mm
-				doc.line(225, lineY, 280, lineY); // HORMAT KAMI - 55mm
-
-				// Name labels under signature lines
-				doc.setFont('helvetica', 'normal');
-				doc.setFontSize(7);
-				doc.text('( )', 40, lineY + 8); // STEMPLE & Ttd PENERIMA
-				doc.text('( )', 110, lineY + 8); // SOPIR
-				doc.text('( )', 180, lineY + 8); // DIPERIKSA OLEH
-				doc.text('( )', 250, lineY + 8); // HORMAT KAMI
-				
+			// Text kedua dengan word wrapping - menggunakan nama customer dari database
+			const companyText = sjData.nama_customer || '';
+			if (companyText) {
+				const companyLines = doc.splitTextToSize(companyText, descBoxWidth - 10);
+				const startY = descBoxY + 30 + (poText ? 15 : 0);
+				doc.text(companyLines, descBoxX + 5, startY);
 			}
 
-			// Save or print the PDF
-			doc.save(`Surat-Jalan-${sjData.nomor_sj}.pdf`);
+			// Save PDF
+			const fileName = `Delivery_Order_${sjData.nomor_sj || 'SJ_' + Date.now()}.pdf`;
+			doc.save(fileName);
+
+			console.log('Delivery Order PDF generated successfully');
 		} catch (error) {
-			console.error('Error printing PDF:', error);
-			toast = {
-				show: true,
-				message: 'Error creating PDF: ' + error.message,
-				type: 'error'
-			};
-			setTimeout(() => (toast.show = false), 5000);
+			console.error('Error generating Delivery Order PDF:', error);
+			alert('Gagal membuat PDF: ' + error.message);
 		}
 	}
 
@@ -1761,17 +1806,20 @@
 	// Function to print after saving (when form is completed)
 	async function printAfterSave() {
 		if (sjFormData.nomor_sj) {
-			// Create a temporary SJ data object from form data
+			// Create a temporary SJ data object from form data with items
 			const tempSJData = {
 				nomor_sj: sjFormData.nomor_sj,
 				tgl_sj: sjFormData.tanggal_sj,
 				kode_customer: sjFormData.kode_customer,
-				nama_customer: sjFormData.nama_customer, // Tambah nama customer
+				nama_customer: sjFormData.nama_customer,
 				nama_sopir: sjFormData.nama_sopir,
 				no_kendaraan: sjFormData.no_kendaraan,
 				no_po: sjFormData.nomor_po_customer,
-				tgl_po: sjFormData.tanggal_po_customer
+				tgl_po: sjFormData.tanggal_po_customer,
+				// Menambahkan items dari form agar bisa diprint
+				items: sjFormData.items || []
 			};
+			console.log('Printing after save with data:', tempSJData);
 			await printSuratJalan(tempSJData);
 		}
 	}
@@ -2391,13 +2439,13 @@
 									>
 										<option value="">Pilih Nomor PO</option>
 										{#each customerPOList as po}
-											<option 
+											<option
 												value={po.nomor_po_customer}
 												disabled={po.status === 'ready'}
 												class={po.status === 'ready' ? 'text-gray-400 bg-gray-100' : ''}
 											>
-												{po.nomor_po_customer} - {po.status || 'Status tidak tersedia'} 
-												{po.kode_sales ? `(Sales: ${po.kode_sales})` : ''} 
+												{po.nomor_po_customer} - {po.status || 'Status tidak tersedia'}
+												{po.kode_sales ? `(Sales: ${po.kode_sales})` : ''}
 												{po.status === 'ready' ? '(Tidak dapat dipilih)' : ''}
 											</option>
 										{/each}
@@ -2408,7 +2456,9 @@
 										type="text"
 										bind:value={sjFormData.nomor_po_customer}
 										class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-										placeholder={sjFormData.kode_customer ? "Tidak ada PO untuk customer ini" : "Pilih customer terlebih dahulu"}
+										placeholder={sjFormData.kode_customer
+											? 'Tidak ada PO untuk customer ini'
+											: 'Pilih customer terlebih dahulu'}
 										readonly={sjFormData.kode_customer ? false : true}
 									/>
 								{/if}
@@ -2634,7 +2684,10 @@
 														bind:value={item.finish_good_id}
 														on:change={() => handleFinishGoodSelect(index, item.finish_good_id)}
 														disabled={item.item_type !== 'finished_good'}
-														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !== 'finished_good' ? 'bg-gray-100' : ''}"
+														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !==
+														'finished_good'
+															? 'bg-gray-100'
+															: ''}"
 													>
 														<option value="">
 															{item.item_type === 'finished_good' ? 'Pilih Finish Good' : '-'}
@@ -2656,7 +2709,10 @@
 														bind:value={item.raw_material_id}
 														on:change={() => handleRawMaterialSelect(index, item.raw_material_id)}
 														disabled={item.item_type !== 'raw_material'}
-														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !== 'raw_material' ? 'bg-gray-100' : ''}"
+														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !==
+														'raw_material'
+															? 'bg-gray-100'
+															: ''}"
 													>
 														<option value="">
 															{item.item_type === 'raw_material' ? 'Pilih Raw Material' : '-'}
@@ -2676,12 +2732,18 @@
 												<td class="px-3 py-2">
 													<select
 														bind:value={item.consumable_sparepart_id}
-														on:change={() => handleConsumableSelect(index, item.consumable_sparepart_id)}
+														on:change={() =>
+															handleConsumableSelect(index, item.consumable_sparepart_id)}
 														disabled={item.item_type !== 'consumable_sparepart'}
-														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !== 'consumable_sparepart' ? 'bg-gray-100' : ''}"
+														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !==
+														'consumable_sparepart'
+															? 'bg-gray-100'
+															: ''}"
 													>
 														<option value="">
-															{item.item_type === 'consumable_sparepart' ? 'Pilih Consumable/Sparepart' : '-'}
+															{item.item_type === 'consumable_sparepart'
+																? 'Pilih Consumable/Sparepart'
+																: '-'}
 														</option>
 														{#if item.item_type === 'consumable_sparepart'}
 															{#each consumableSpareparts as cs}
@@ -2877,11 +2939,11 @@
 				</button>
 			</div>
 		</div>
-		
+
 		<!-- Data Summary -->
 		<div class="mt-4 p-3 bg-blue-50 rounded-md">
 			<div class="text-sm text-blue-800">
-				<strong>Data Summary:</strong> 
+				<strong>Data Summary:</strong>
 				Loaded {finishedGoods.length} dari {totalCountInDirectus} total items di Directus
 			</div>
 		</div>
@@ -3538,30 +3600,30 @@
 			size: A4 landscape;
 			margin: 10mm;
 		}
-		
+
 		body {
 			-webkit-print-color-adjust: exact;
 			color-adjust: exact;
 		}
 	}
-	
+
 	/* Compact layout styles for better space utilization */
 	.compact-form {
 		max-width: 100%;
 		margin: 0 auto;
 	}
-	
+
 	.form-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
 		gap: 1rem;
 	}
-	
+
 	.compact-table {
 		font-size: 0.9em;
 		line-height: 1.2;
 	}
-	
+
 	.compact-table th,
 	.compact-table td {
 		padding: 0.3rem;
