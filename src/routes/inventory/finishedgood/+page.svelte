@@ -15,6 +15,7 @@
 	// State untuk data finished goods
 	let finishedGoods = [];
 	let filteredFinishedGoods = [];
+	let totalCountInDirectus = 0;
 
 	// Paginasi
 	let currentPage = 1;
@@ -60,7 +61,9 @@
 	let showSJList = false;
 	let suratJalanList = [];
 	let rawMaterials = []; // This would be populated from API
+	let consumableSpareparts = []; // Consumable & Sparepart data from API
 	let customerOptions = []; // Customer options for dropdown
+	let customerPOList = []; // PO list for selected customer
 
 	// State for Production Request Modal
 	let showProductionRequestModal = false;
@@ -80,26 +83,20 @@
 		no_kendaraan: '',
 		term: 30, // Default 30 days
 		due_date: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
-		ppn_enable: true,
-		include_ppn: true,
-		tarif_ppn: 11, // Default 11%
-		nominal_ppn: 0,
-		dasar_pengenaan_pajak: 0,
-		harga_setelah_pajak_diskon: 0,
-		sisa_sales_order: 0,
 		items: [
 			{
 				finish_good_id: '',
 				finish_good_name: '',
 				raw_material_id: '',
 				raw_material_name: '',
+				consumable_sparepart_id: '',
+				consumable_sparepart_name: '',
+				item_type: 'finished_good', // 'finished_good', 'raw_material', 'consumable_sparepart'
 				warna: '',
 				kemasan: '',
 				satuan: '',
-				quantity: 1,
-				harga: 0,
-				diskon: 0,
-				total_harga: 0
+				quantity: 1
+				// Harga, diskon, dan total_harga dihapus
 			}
 		]
 	};
@@ -109,28 +106,129 @@
 			checkLowStockItems();
 		});
 		loadRawMaterials();
+		loadConsumableSpareparts();
 		loadCustomerOptions();
 		loadGudangList();
 	});
 
 	async function loadFinishedGoods() {
 		loading = true;
+		error = null;
 		try {
-			const response = await fetch('https://directus.eltamaprimaindo.com/items/finishgood', {
+			console.log('Loading finished goods...');
+			console.log('Base URL: https://directus.eltamaprimaindo.com');
+			
+			// Get total count first
+			console.log('Getting total count of finished goods...');
+			const countUrl = 'https://directus.eltamaprimaindo.com/items/finishgood?aggregate[count]=*';
+			console.log('Count request URL:', countUrl);
+			
+			const countResponse = await fetch(countUrl, {
 				headers: {
 					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
 				}
 			});
+			
+			if (!countResponse.ok) {
+				console.warn('Could not get count, proceeding without count verification');
+			}
+			
+			let totalCountInDirectus_temp = 0;
+			try {
+				const countResult = await countResponse.json();
+				console.log('Count result:', countResult);
+				totalCountInDirectus_temp = countResult.data?.[0]?.count || 0;
+				totalCountInDirectus = totalCountInDirectus_temp;
+				console.log('Total finished goods in Directus:', totalCountInDirectus);
+			} catch (countError) {
+				console.warn('Count parsing failed:', countError);
+			}
+			
+			// Get all finished goods using pagination to ensure we get all data
+			let allFinishedGoods = [];
+			let offset = 0;
+			const limit = 1000; // Use pagination with 1000 items per request
+			let hasMore = true;
+			
+			while (hasMore) {
+				const dataUrl = `https://directus.eltamaprimaindo.com/items/finishgood?fields=*&limit=${limit}&offset=${offset}&sort=id`;
+				console.log(`Data request URL (offset ${offset}):`, dataUrl);
+				
+				const response = await fetch(dataUrl, {
+					headers: {
+						Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+					}
+				});
 
-			if (!response.ok) {
-				throw new Error('Failed to fetch finished goods');
+				console.log(`Finished goods fetch response status (offset ${offset}):`, response.status);
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					console.error('Finished goods fetch error response:', errorText);
+					throw new Error(`Failed to fetch finished goods: HTTP ${response.status}`);
+				}
+
+				const data = await response.json();
+				console.log(`Batch ${Math.floor(offset/limit) + 1} - received ${data.data?.length || 0} items`);
+				
+				if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+					allFinishedGoods = allFinishedGoods.concat(data.data);
+					offset += limit;
+					
+					// Check if we've received fewer items than the limit, indicating last page
+					if (data.data.length < limit) {
+						hasMore = false;
+					}
+					
+					// Safety check - if we've loaded as many as the total count, stop
+					if (totalCountInDirectus_temp > 0 && allFinishedGoods.length >= totalCountInDirectus_temp) {
+						hasMore = false;
+					}
+					
+					// Safety check - prevent infinite loop
+					if (offset > 10000) {
+						console.warn('Safety limit reached, stopping pagination');
+						hasMore = false;
+					}
+				} else {
+					hasMore = false;
+				}
+				
+				console.log(`Total loaded so far: ${allFinishedGoods.length}`);
+			}
+			
+			console.log('Finished goods fetch result - Total items loaded:', allFinishedGoods.length);
+			console.log('Received vs Total:', allFinishedGoods.length, '/', totalCountInDirectus);
+			
+			// Debug: Log first and last items
+			if (allFinishedGoods.length > 0) {
+				console.log('First finished good item:', allFinishedGoods[0]);
+				console.log('First item keys:', Object.keys(allFinishedGoods[0]));
+				console.log('Last finished good item:', allFinishedGoods[allFinishedGoods.length - 1]);
+			}
+			
+			if (!Array.isArray(allFinishedGoods)) {
+				throw new Error('Invalid response format - no data array');
 			}
 
-			const data = await response.json();
-			finishedGoods = data.data.map((item) => ({
+			finishedGoods = allFinishedGoods.map((item) => ({
 				...item,
 				status: calculateStatus(item.sisa_stok || 0)
 			}));
+
+			console.log('Finished goods processed:', finishedGoods.length);
+			console.log('Total count comparison - Loaded:', finishedGoods.length, 'vs Directus Total:', totalCountInDirectus);
+			
+			// Debug sample item
+			if (finishedGoods[0]) {
+				console.log('Sample processed item:', {
+					id: finishedGoods[0].id,
+					kode_barang: finishedGoods[0].kode_barang,
+					nama_barang: finishedGoods[0].nama_barang,
+					sisa_stok: finishedGoods[0].sisa_stok,
+					status: finishedGoods[0].status
+				});
+			}
 
 			filteredFinishedGoods = finishedGoods;
 			totalItems = finishedGoods.length;
@@ -138,6 +236,11 @@
 		} catch (err) {
 			error = err.message;
 			console.error('Load Finished Goods Error:', err);
+			console.error('Error details:', {
+				message: err.message,
+				stack: err.stack,
+				name: err.name
+			});
 		} finally {
 			loading = false;
 		}
@@ -520,6 +623,44 @@
 		}
 	}
 
+	// Load consumable & sparepart data
+	async function loadConsumableSpareparts() {
+		try {
+			const response = await fetch('https://directus.eltamaprimaindo.com/items/consumable?limit=-1&fields=*', {
+				headers: {
+					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+				}
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to fetch consumable & sparepart data');
+			}
+
+			const data = await response.json();
+			
+			// Map the data to match our expected structure
+			consumableSpareparts = data.data?.map(item => ({
+				id: item.id,
+				nama: item.namabarang || '-',
+				kategori: item.kategori || '-',
+				subKategori: item.subkategori || '-',
+				stokIn: parseInt(item.stokmasuk) || 0,
+				stokOut: parseInt(item.stokkeluar) || 0,
+				stokAkhir: parseInt(item.stokakhir) || 0,
+				sisa_stok: parseInt(item.stokakhir) || 0, // Use stokakhir as sisa_stok for consistency
+				status: item.status || '-',
+				moving: item.moving || '-',
+				unit: item.unit || '-',
+				safety: item.safety || '-'
+			})) || [];
+			
+			console.log('Consumable & Sparepart data loaded:', consumableSpareparts.length);
+		} catch (err) {
+			console.error('Load Consumable & Sparepart Error:', err);
+			consumableSpareparts = [];
+		}
+	}
+
 	// Load customer options
 	async function loadCustomerOptions() {
 		try {
@@ -528,6 +669,41 @@
 		} catch (error) {
 			console.error('Error loading customer options:', error);
 			customerOptions = [];
+		}
+	}
+
+	// Load PO list for selected customer
+	async function loadCustomerPOList(kodeCustomer) {
+		try {
+			const response = await fetch(`https://directus.eltamaprimaindo.com/items/so_customer?filter[kode_customer][_eq]=${kodeCustomer}`, {
+				headers: {
+					'Authorization': 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+				}
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to fetch customer PO data');
+			}
+
+			const data = await response.json();
+			customerPOList = data.data || [];
+			console.log('Customer PO list loaded:', customerPOList.length, 'items for customer:', kodeCustomer);
+			
+			// Debug: Check if kode_sales exists in the data
+			if (customerPOList.length > 0) {
+				console.log('Sample PO data:', customerPOList[0]);
+				customerPOList.forEach((po, index) => {
+					console.log(`PO ${index + 1}:`, {
+						nomor_po_customer: po.nomor_po_customer,
+						kode_sales: po.kode_sales,
+						status: po.status,
+						tanggal_po: po.tanggal_po
+					});
+				});
+			}
+		} catch (error) {
+			console.error('Error loading customer PO list:', error);
+			customerPOList = [];
 		}
 	}
 
@@ -575,12 +751,85 @@
 				} else {
 					sjFormData.nama_customer = '';
 				}
+
+				// Load PO list for this customer
+				await loadCustomerPOList(selectedKode);
+				
+				// Reset PO selection when customer changes
+				sjFormData.nomor_po_customer = '';
+				sjFormData.tanggal_po_customer = new Date().toISOString().split('T')[0];
+				sjFormData.kode_sales = ''; // Reset kode sales
 			} catch (error) {
 				console.error('Error getting customer details:', error);
 				sjFormData.nama_customer = '';
+				customerPOList = [];
 			}
 		} else {
 			sjFormData.nama_customer = '';
+			customerPOList = [];
+			sjFormData.nomor_po_customer = '';
+			sjFormData.kode_sales = ''; // Reset kode sales
+		}
+	}
+
+	// Function to handle PO selection
+	function handlePOSelection(event) {
+		const selectedPO = event.target.value;
+		
+		// Find the selected PO data to validate status
+		const poData = customerPOList.find(po => po.nomor_po_customer === selectedPO);
+		
+		// Check if PO status is ready
+		if (poData && poData.status === 'ready') {
+			// Reset selection and show warning
+			sjFormData.nomor_po_customer = '';
+			toast = {
+				show: true,
+				message: 'PO ini sudah berstatus ready dan tidak dapat dipilih lagi.',
+				type: 'error'
+			};
+			setTimeout(() => (toast.show = false), 3000);
+			return;
+		}
+		
+		sjFormData.nomor_po_customer = selectedPO;
+
+		// Set the date if available
+		if (poData && poData.tanggal_po) {
+			sjFormData.tanggal_po_customer = new Date(poData.tanggal_po).toISOString().split('T')[0];
+		}
+
+		// Auto-fill kode sales if available
+		console.log('Debugging PO selection - Selected PO:', selectedPO);
+		console.log('Debugging PO selection - Found PO data:', poData);
+		
+		if (poData) {
+			console.log('All available fields in PO data:', Object.keys(poData));
+			
+			if (poData.kode_sales) {
+				sjFormData.kode_sales = poData.kode_sales;
+				console.log('Autofill kode_sales berhasil:', poData.kode_sales);
+			} else {
+				// Check for alternative field names
+				const possibleSalesFields = ['sales_code', 'kodeSales', 'sales', 'kode_salesman'];
+				let salesFound = false;
+				
+				for (const field of possibleSalesFields) {
+					if (poData[field]) {
+						sjFormData.kode_sales = poData[field];
+						console.log(`Autofill kode_sales berhasil menggunakan field alternatif '${field}':`, poData[field]);
+						salesFound = true;
+						break;
+					}
+				}
+				
+				if (!salesFound) {
+					console.log('Kode sales tidak ditemukan dalam data PO. Fields tersedia:', Object.keys(poData));
+					sjFormData.kode_sales = ''; // Reset if no sales code found
+				}
+			}
+		} else {
+			console.log('Data PO tidak ditemukan untuk nomor:', selectedPO);
 		}
 	}
 
@@ -589,10 +838,13 @@
 		sjFormData.items = [
 			...sjFormData.items,
 			{
+				item_type: 'finished_good',
 				finish_good_id: '',
 				finish_good_name: '',
 				raw_material_id: '',
 				raw_material_name: '',
+				consumable_sparepart_id: '',
+				consumable_sparepart_name: '',
 				warna: '',
 				kemasan: '',
 				satuan: '',
@@ -653,47 +905,62 @@
 		calculateItemTotal(index);
 	}
 
-	// Calculate item total price
-	function calculateItemTotal(index) {
-		const item = sjFormData.items[index];
-		const subtotal = item.harga * item.quantity;
-		const discount = (subtotal * item.diskon) / 100;
-		item.total_harga = subtotal - discount;
+	// Function to handle consumable & sparepart selection
+	function handleConsumableSelect(index, consumableId) {
+		const selectedConsumable = consumableSpareparts.find((item) => item.id === consumableId);
+		if (selectedConsumable) {
+			sjFormData.items[index].consumable_sparepart_id = selectedConsumable.id;
+			sjFormData.items[index].consumable_sparepart_name = selectedConsumable.nama;
+			sjFormData.items[index].satuan = selectedConsumable.unit || '';
 
-		calculateTotals();
+			// Check if stock is sufficient
+			if (selectedConsumable.sisa_stok < sjFormData.items[index].quantity) {
+				toast = {
+					show: true,
+					message: `Peringatan: Stok ${selectedConsumable.nama} tidak mencukupi (${selectedConsumable.sisa_stok} tersedia)`,
+					type: 'warning'
+				};
+				setTimeout(() => (toast.show = false), 5000);
+			}
+		}
+		calculateItemTotal(index);
 	}
 
-	// Calculate overall totals
+	// Function to handle item type selection
+	function handleItemTypeSelect(index, itemType) {
+		// Clear all item selections when type changes
+		sjFormData.items[index].item_type = itemType;
+		sjFormData.items[index].finish_good_id = '';
+		sjFormData.items[index].finish_good_name = '';
+		sjFormData.items[index].raw_material_id = '';
+		sjFormData.items[index].raw_material_name = '';
+		sjFormData.items[index].consumable_sparepart_id = '';
+		sjFormData.items[index].consumable_sparepart_name = '';
+		sjFormData.items[index].warna = '';
+		sjFormData.items[index].kemasan = '';
+		sjFormData.items[index].satuan = '';
+	}
+
+	// Calculate item total (simplified - not needed but kept for compatibility)
+	function calculateItemTotal(index) {
+		// Function kept but no longer calculates financial totals
+		// since we only show quantity x unit
+	}
+
+	// Calculate overall totals (simplified - removed financial calculations)
 	function calculateTotals() {
-		const subtotal = sjFormData.items.reduce((sum, item) => sum + item.total_harga, 0);
-		sjFormData.dasar_pengenaan_pajak = subtotal;
-
-		if (sjFormData.ppn_enable) {
-			sjFormData.nominal_ppn = (subtotal * sjFormData.tarif_ppn) / 100;
-		} else {
-			sjFormData.nominal_ppn = 0;
-		}
-
-		sjFormData.harga_setelah_pajak_diskon = sjFormData.include_ppn
-			? subtotal + sjFormData.nominal_ppn
-			: subtotal;
+		// Function kept but simplified since we no longer calculate financial totals
 	}
 
 	// Save SJ form
 	async function saveSJForm() {
 		saving = true;
 		try {
-			// Validate required fields
-			if (!sjFormData.kode_customer.trim()) {
-				throw new Error('Kode Customer harus diisi');
-			}
-			if (!sjFormData.kode_sales.trim()) {
-				throw new Error('Kode Sales harus diisi');
-			}
+			// Removed required field validations - all fields are now optional
 
 			// Validate items
 			const validItems = sjFormData.items.filter(
-				(item) => (item.finish_good_id || item.raw_material_id) && item.quantity > 0
+				(item) => (item.finish_good_id || item.raw_material_id || item.consumable_sparepart_id) && item.quantity > 0
 			);
 
 			if (validItems.length === 0) {
@@ -720,6 +987,15 @@
 						insufficientStock = true;
 						stockErrors.push(
 							`Stok ${rawMaterial.nama_barang} tidak mencukupi (${rawMaterial.sisa_stok} tersedia)`
+						);
+					}
+				}
+				if (item.consumable_sparepart_id) {
+					const consumable = consumableSpareparts.find((cs) => cs.id === item.consumable_sparepart_id);
+					if (consumable && consumable.sisa_stok < item.quantity) {
+						insufficientStock = true;
+						stockErrors.push(
+							`Stok ${consumable.nama} tidak mencukupi (${consumable.sisa_stok} tersedia)`
 						);
 					}
 				}
@@ -771,6 +1047,8 @@
 					// Item specific data
 					nama_finishgood: item.finish_good_name || null,
 					nama_rawmaterial: item.raw_material_name || null,
+					nama_consumable_sparepart: item.consumable_sparepart_name || null,
+					item_type: item.item_type || 'finished_good',
 					warna: item.warna || null,
 					satuan: item.satuan || null,
 					quantity: item.quantity || null,
@@ -784,7 +1062,7 @@
 				results.push(result);
 			}
 
-			// Update stock for finished goods and raw materials
+			// Update stock for finished goods, raw materials, and consumable & sparepart
 			for (const item of validItems) {
 				if (item.finish_good_id && item.quantity > 0) {
 					const finishGood = finishedGoods.find((fg) => fg.id === item.finish_good_id);
@@ -799,6 +1077,14 @@
 					if (rawMaterial) {
 						const newStock = Math.max(0, rawMaterial.sisa_stok - item.quantity);
 						await updateRawMaterialStock(item.raw_material_id, newStock);
+					}
+				}
+
+				if (item.consumable_sparepart_id && item.quantity > 0) {
+					const consumable = consumableSpareparts.find((cs) => cs.id === item.consumable_sparepart_id);
+					if (consumable) {
+						const newStock = Math.max(0, consumable.sisa_stok - item.quantity);
+						await updateConsumableStock(item.consumable_sparepart_id, newStock);
 					}
 				}
 			}
@@ -818,6 +1104,7 @@
 			// Reload data to reflect stock changes
 			await loadFinishedGoods();
 			await loadRawMaterials();
+			await loadConsumableSpareparts();
 
 			closeSJForm();
 		} catch (err) {
@@ -877,6 +1164,28 @@
 		}
 	}
 
+	// Helper function to update consumable & sparepart stock
+	async function updateConsumableStock(id, newStock) {
+		try {
+			const response = await fetch(`https://directus.eltamaprimaindo.com/items/consumable/${id}`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+				},
+				body: JSON.stringify({
+					stokakhir: newStock.toString() // Convert to string as per the API structure
+				})
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to update consumable & sparepart stock');
+			}
+		} catch (error) {
+			console.error('Error updating consumable & sparepart stock:', error);
+		}
+	}
+
 	// Update due date when term changes
 	function updateDueDate() {
 		const invoiceDate = new Date(sjFormData.tanggal_invoice);
@@ -902,13 +1211,6 @@
 			no_kendaraan: '',
 			term: 30, // Default 30 days
 			due_date: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
-			ppn_enable: true,
-			include_ppn: true,
-			tarif_ppn: 11, // Default 11%
-			nominal_ppn: 0,
-			dasar_pengenaan_pajak: 0,
-			harga_setelah_pajak_diskon: 0,
-			sisa_sales_order: 0,
 			items: [
 				{
 					finish_good_id: '',
@@ -918,13 +1220,15 @@
 					warna: '',
 					kemasan: '',
 					satuan: '',
-					quantity: 1,
-					harga: 0,
-					diskon: 0,
-					total_harga: 0
+					quantity: 1
+					// Harga, diskon, dan total_harga dihapus
 				}
 			]
 		};
+		
+		// Reset customer PO list
+		customerPOList = [];
+		
 		showSJForm = true;
 	}
 
@@ -963,7 +1267,33 @@
 			console.log('suratJalanList:', suratJalanList);
 			console.log('sjFormData:', sjFormData);
 
-			const doc = new jsPDF();
+			// Calculate dynamic page height based on content - optimized for compact layout
+			let estimatedHeight = 90; // Reduced base height for header and customer info
+			
+			// Get item count for height calculation - default minimum 5 items
+			let itemCount = 5; // Default minimum 5 items untuk space yang cukup
+			if (sjData.items && Array.isArray(sjData.items)) {
+				itemCount = Math.max(sjData.items.length, 5); // Minimal 5 items
+			} else if (sjFormData && sjFormData.items) {
+				itemCount = Math.max(sjFormData.items.length, 5); // Minimal 5 items
+			} else if (suratJalanList && suratJalanList.length > 0) {
+				const matchingItems = suratJalanList.filter(item => item.nomor_sj === sjData.nomor_sj);
+				itemCount = Math.max(matchingItems.length || 1, 5); // Minimal 5 items
+			}
+			
+			// Add height for table: header (8mm) + items (6mm each) + spacing (compact)
+			estimatedHeight += 8 + (itemCount * 6) + 10;
+			
+			// Add height for footer sections: total (10mm) + delivery (12mm) + note (8mm) + signatures (50mm) - INCREASED signature space significantly
+			estimatedHeight += 80;
+			
+			// Create PDF with landscape orientation (width: A4 height, height: dynamic)
+			const pageHeight = Math.max(estimatedHeight, 220); // INCREASED minimum height from 180 to 220mm
+			const doc = new jsPDF({
+				unit: 'mm',
+				orientation: 'landscape',
+				format: [297, pageHeight] // 297mm width (A4 landscape), dynamic height
+			});
 
 			// Set font
 			doc.setFont('helvetica');
@@ -995,45 +1325,53 @@
 				doc.text('[LOGO]', 15, 25);
 			}
 
-			// Company Header - adjusted for logo space
+			// Company Header - adjusted for logo space and landscape orientation
 			doc.setFontSize(16);
 			doc.setFont('helvetica', 'bold');
-			doc.text('PT. ELTAMA PRIMA INDO', 105, 20, { align: 'center' });
+			doc.text('PT. ELTAMA PRIMA INDO', 148, 20, { align: 'center' });
 
 			doc.setFontSize(9);
 			doc.setFont('helvetica', 'normal');
-			doc.text('Jl. Raya Parpostel Gang Nangka RT. 02 RW. 03', 105, 28, { align: 'center' });
-			doc.text('No 88 Kel. Bojong Kulur Kec. Gunung Putri', 105, 34, { align: 'center' });
-			doc.text('Bogor, Ja-Bar 021-82745454', 105, 40, { align: 'center' });
+			doc.text('Jl. Raya Parpostel Gang Nangka RT. 02 RW. 03', 148, 28, { align: 'center' });
+			doc.text('No 88 Kel. Bojong Kulur Kec. Gunung Putri', 148, 34, { align: 'center' });
+			doc.text('Bogor, Ja-Bar 021-82745454', 148, 40, { align: 'center' });
 
-			// Draw separator line
+			// Draw separator line - extended for landscape
 			doc.setLineWidth(0.5);
-			doc.line(14, 45, 196, 45);
+			doc.line(14, 45, 283, 45);
 
-			// Customer section - better formatting
-			doc.setFontSize(10);
+			// Customer section - redesigned layout dengan space yang cukup
+			doc.setLineWidth(0.3);
+			
+			// Left box for customer info - ukuran lebih kecil
+			doc.rect(14, 50, 100, 35); // Customer info box - dikurangi lebar
+			
+			doc.setFontSize(9);
 			doc.setFont('helvetica', 'normal');
-			doc.text('Kepada Yth.', 14, 55);
+			doc.text('Kepada Yth.', 16, 56);
 
-			// Customer info with proper spacing
+			// Customer info with compact spacing
 			doc.setFont('helvetica', 'bold');
-			doc.text(`${sjData.kode_customer || 'CUSTOMER'}`, 14, 62);
+			doc.text(`${sjData.kode_customer || 'CUSTOMER'}`, 16, 62);
 			doc.setFont('helvetica', 'normal');
-			doc.text(`${sjData.nama_customer || 'PT. MOWILEX INDONESIA'}`, 14, 68);
-			doc.text('Jl. Daan Mogot Raya KM. 10 No. 2A RT.001/008, Kedaung-Kaliangke', 14, 74);
-			doc.text('Cengkareng - Jakarta Barat, 11710', 14, 80);
-			doc.text('Telp: 021 - 5406663, 5451292, 619187', 14, 86);
+			doc.setFontSize(8);
+			doc.text(`${sjData.nama_customer || 'PT. MOWILEX INDONESIA'}`, 16, 67);
+			doc.text('Jl. Daan Mogot Raya KM. 10 No. 2A', 16, 72);
+			doc.text('RT.001/008, Kedaung-Kaliangke', 16, 77);
+			doc.text('Cengkareng - Jakarta Barat, 11710', 16, 82);
 
-			// Right side information - better aligned
-			doc.setFontSize(10);
+			// Right box for document info - digeser lebih ke kanan dengan space
+			doc.rect(125, 50, 158, 35); // Document info box - digeser ke kanan, lebar ditambah
+			
+			doc.setFontSize(9);
 			doc.setFont('helvetica', 'normal');
-			const rightX = 135;
-			const colonX = rightX + 30;
+			const rightX = 127; // Posisi lebih ke kanan
+			const colonX = rightX + 35; // Space untuk label yang lebih panjang
 			const valueX = colonX + 5;
 
-			doc.text('Nomor', rightX, 55);
-			doc.text(':', colonX, 55);
-			doc.text(sjData.nomor_sj || 'SJ/2025/01/0001', valueX, 55);
+			doc.text('Nomor', rightX, 56);
+			doc.text(':', colonX, 56);
+			doc.text(sjData.nomor_sj || 'SJ/2025/01/0001', valueX, 56);
 
 			doc.text('Tanggal', rightX, 62);
 			doc.text(':', colonX, 62);
@@ -1043,34 +1381,28 @@
 				62
 			);
 
-			doc.text('No. Kendaraan', rightX, 69);
-			doc.text(':', colonX, 69);
-			doc.text(sjData.no_kendaraan || '1231', valueX, 69);
+			doc.text('No. Kendaraan', rightX, 68);
+			doc.text(':', colonX, 68);
+			doc.text(sjData.no_kendaraan || '1231', valueX, 68);
 
-			doc.text('Sopir / Kernet', rightX, 76);
-			doc.text(':', colonX, 76);
-			doc.text(sjData.nama_sopir || 'ANIRIBU', valueX, 76);
+			doc.text('Sopir / Kernet', rightX, 74);
+			doc.text(':', colonX, 74);
+			doc.text(sjData.nama_sopir || 'ANIRIBU', valueX, 74);
 
-			doc.text('No. PO', rightX, 83);
-			doc.text(':', colonX, 83);
-			doc.text(sjData.no_po || '123456', valueX, 83);
+			doc.text('No. PO', rightX, 80);
+			doc.text(':', colonX, 80);
+			doc.text(sjData.no_po || '123456', valueX, 80);
 
-			doc.text('Tanggal PO', rightX, 90);
-			doc.text(':', colonX, 90);
-			doc.text(
-				sjData.tgl_po ? new Date(sjData.tgl_po).toLocaleDateString('id-ID') : '29/7/2025',
-				valueX,
-				90
-			);
+			// Hapus vertical divider karena tidak perlu lagi
 
-			// SURAT JALAN title - better positioned
-			doc.setFontSize(18);
+			// SURAT JALAN title - compact positioning
+			doc.setFontSize(16);
 			doc.setFont('helvetica', 'bold');
-			doc.text('SURAT JALAN', 105, 105, { align: 'center' });
+			doc.text('SURAT JALAN', 148, 95, { align: 'center' });
 
-			// Table headers and data - Enhanced with more columns
+			// Table headers and data - Simplified columns without warna
 			const headers = [
-				['No.', 'KODE BARANG', 'NAMA BARANG', 'WARNA', 'KEMASAN', 'QUANTITY', 'SATUAN', 'Total RP']
+				['No.', 'NAMA BARANG', 'KEMASAN', 'QTY', 'SATUAN', 'Total KG']
 			];
 
 			// Create table data - group items with same nomor_sj
@@ -1129,116 +1461,95 @@
 				// Create a placeholder item if no items found
 				groupedItems = [
 					{
-						kode_barang: 'OX-9250-20',
 						nama_finishgood: 'OX 9250 20 CLEAR',
 						nama_rawmaterial: '',
-						warna: 'CLEAR',
 						kemasan: 'PAIL',
 						quantity: 2.0,
-						satuan: 'PAIL',
-						harga: 0,
-						total_harga: 0
+						satuan: 'PAIL'
 					}
 				];
 			}
 
 			const tableData = [];
-			let totalRp = 0; // Initialize the total
+			let totalKg = 0; // Initialize the total KG
 
 			groupedItems.forEach((item, index) => {
 				const namaBarang = item.nama_finishgood || item.nama_rawmaterial || '-';
-				const kodeBarang = item.kode_barang || '-';
-				const warna = item.warna || '-';
 				const kemasan = item.kemasan || '-';
 				const quantity = Number(parseFloat(item.quantity) || 0);
 				const satuan = item.satuan || 'PAIL';
-				const harga = Number(parseFloat(item.harga) || 0);
 				
-				// Calculate total for this item (quantity * price)
-				const totalHarga = quantity * harga;
+				// Calculate total KG for this item (quantity * 1, assuming each unit = 1 KG)
+				// You can modify this calculation based on your business logic
+				const totalKgItem = quantity; // Assuming 1 unit = 1 KG
 
 				// Add this item's total to the grand total
-				totalRp += totalHarga;
+				totalKg += totalKgItem;
 
 				console.log(`Processing item ${index + 1}:`, {
-					kodeBarang,
 					namaBarang,
-					warna,
 					kemasan,
 					quantity,
 					satuan,
-					harga,
-					totalHarga,
-					runningTotal: totalRp
+					totalKgItem,
+					runningTotal: totalKg
 				});
 
 				tableData.push([
 					(index + 1).toString(),
-					kodeBarang,
 					namaBarang,
-					warna,
 					kemasan,
 					quantity.toString(),
 					satuan,
-					'Rp ' + totalHarga.toLocaleString('id-ID')
+					totalKgItem.toFixed(2)
 				]);
 			});
 
-			// Add empty row if no items
-			if (tableData.length === 0) {
+			// Pastikan minimal 5 baris untuk tampilan yang konsisten
+			while (tableData.length < 5) {
 				tableData.push([
-					'1',
-					'OX-9250-20',
-					'OX 9250 20 CLEAR',
-					'CLEAR',
-					'PAIL',
-					'2',
-					'PAIL',
-					'Rp 0'
+					(tableData.length + 1).toString(),
+					'-',
+					'-',
+					'0',
+					'-',
+					'0.00'
 				]);
-				totalRp = 0.0;
 			}
 
-			console.log('Final calculated totalRp from table items:', totalRp);
-			console.log('Original sjData totals for comparison:', {
-				netto_amount: sjData.netto_amount,
-				harga_setelah_pajak_diskon: sjData.harga_setelah_pajak_diskon,
-				dasar_pengenaan_pajak: sjData.dasar_pengenaan_pajak
-			});
+			console.log('Final calculated totalKg from table items:', totalKg);
 
-			// Use the same total logic as displayed in Daftar Surat Jalan list
-			const finalTotalRp = sjData.dasar_pengenaan_pajak || sjData.netto_amount || totalRp;
-			console.log('Using finalTotalRp for PDF:', finalTotalRp);
+			// Use totalKg as the final total
+			const finalTotalKg = totalKg;
+			console.log('Using finalTotalKg for PDF:', finalTotalKg);
 
 			// Try to use autoTable if available, otherwise use manual table
 			if (doc.autoTable) {
-				// Add table with better styling
+				// Add table with better styling - compact layout for landscape
 				doc.autoTable({
 					head: headers,
 					body: tableData,
-					startY: 115,
+					startY: 102, // Moved up for compact layout
 					theme: 'grid',
 					styles: {
-						fontSize: 10,
-						cellPadding: 4,
+						fontSize: 9, // Slightly smaller font
+						cellPadding: 3, // Reduced padding
 						lineColor: [0, 0, 0],
 						lineWidth: 0.1
 					},
 					headStyles: {
-						fillColor: [255, 255, 255],
+						fillColor: [240, 240, 240], // Light gray background
 						textColor: [0, 0, 0],
 						fontStyle: 'bold',
 						halign: 'center'
 					},
 					columnStyles: {
-						0: { cellWidth: 12, halign: 'center' }, // No.
-						1: { cellWidth: 25, halign: 'center' }, // KODE BARANG
-						2: { cellWidth: 50, halign: 'left' }, // NAMA BARANG
-						3: { cellWidth: 20, halign: 'center' }, // WARNA
-						4: { cellWidth: 18, halign: 'center' }, // KEMASAN
-						5: { cellWidth: 20, halign: 'center' }, // QUANTITY
-						6: { cellWidth: 18, halign: 'center' }, // SATUAN
-						7: { cellWidth: 25, halign: 'center' } // Total RP
+						0: { cellWidth: 18, halign: 'center' }, // No. - compact
+						1: { cellWidth: 130, halign: 'left' }, // NAMA BARANG - maximized
+						2: { cellWidth: 35, halign: 'center' }, // KEMASAN - compact
+						3: { cellWidth: 25, halign: 'center' }, // QTY - compact
+						4: { cellWidth: 30, halign: 'center' }, // SATUAN - compact
+						5: { cellWidth: 30, halign: 'center' } // Total KG - compact
 					},
 					margin: { left: 14, right: 14 }
 				});
@@ -1248,17 +1559,17 @@
 					? doc.lastAutoTable.finalY + 5
 					: 135 + tableData.length * 12;
 
-				// Total RP section with better formatting
+				// Total KG section with better formatting - extended for landscape
 				doc.setLineWidth(0.5);
-				doc.line(14, finalY, 196, finalY);
+				doc.line(14, finalY, 283, finalY);
 				doc.setFont('helvetica', 'bold');
 				doc.setFontSize(10);
-				doc.text('TOTAL RP', 140, finalY + 8);
-				doc.text(':', 165, finalY + 8);
-				doc.text('Rp ' + finalTotalRp.toLocaleString('id-ID'), 175, finalY + 8);
+				doc.text('TOTAL KG', 220, finalY + 8);
+				doc.text(':', 245, finalY + 8);
+				doc.text(finalTotalKg.toFixed(2), 255, finalY + 8);
 
-				// Customer delivery info
-				const deliveryY = finalY + 25;
+				// Customer delivery info - compact
+				const deliveryY = finalY + 12; // Reduced spacing further
 				doc.setFont('helvetica', 'normal');
 				doc.setFontSize(9);
 				doc.text(
@@ -1267,89 +1578,102 @@
 					deliveryY
 				);
 
-				// Note section
+				// Note section - compact
 				doc.setFont('helvetica', 'bold');
-				doc.text('NB.', 14, deliveryY + 12);
+				doc.text('NB.', 14, deliveryY + 6); // Reduced spacing
 				doc.setFont('helvetica', 'normal');
-				doc.text('KIRIM KE CUSTOMER', 30, deliveryY + 12);
+				doc.text('KIRIM KE CUSTOMER', 30, deliveryY + 6);
 
-				// Signature section - using underlines instead of boxes
-				const signY = deliveryY + 35;
+				// Signature section - layout diperbaiki dengan garis bawah yang jelas
+				const signY = deliveryY + 18; // Reduced spacing for more room
 				doc.setFontSize(9);
 				doc.setFont('helvetica', 'normal');
 
-				// Signature labels
-				doc.text('STEMPLE & Ttd PENERIMA', 20, signY);
-				doc.text('SOPIR', 75, signY);
-				doc.text('DIPERIKSA OLEH', 120, signY);
-				doc.text('HORMAT KAMI', 165, signY);
+				// Signature labels - dengan spacing yang lebih baik untuk landscape
+				doc.text('STEMPLE & Ttd PENERIMA', 15, signY);
+				doc.text('SOPIR', 85, signY);
+				doc.text('DIPERIKSA OLEH', 155, signY);
+				doc.text('HORMAT KAMI', 225, signY);
 
-				// Signature underlines (instead of boxes)
-				const lineY = signY + 25;
-				doc.setLineWidth(0.3);
-				doc.line(20, lineY, 65, lineY); // STEMPLE & Ttd PENERIMA
-				doc.line(75, lineY, 110, lineY); // SOPIR
-				doc.line(120, lineY, 155, lineY); // DIPERIKSA OLEH
-				doc.line(165, lineY, 195, lineY); // HORMAT KAMI
+				// Ensure drawing color and stroke is properly set
+				doc.setDrawColor(0, 0, 0); // Black color
+				doc.setFillColor(0, 0, 0); // Black fill
 
-				// Names under signatures
-				doc.setFontSize(8);
-				doc.text('(                         )', 20, lineY + 8);
-				doc.text('(               	        )', 75, lineY + 8);
-				doc.text('(                 	    )', 120, lineY + 8);
-				doc.text('(                   	    )', 165, lineY + 8);
+				// Single signature underlines - garis bawah yang tebal dan jelas
+				const lineY = signY + 20; // Spacing for signature lines
+				doc.setLineWidth(1.0); // Thick lines untuk visibility
+				
+				// Draw signature lines
+				doc.line(15, lineY, 80, lineY); // STEMPLE & Ttd PENERIMA - 65mm
+				doc.line(85, lineY, 145, lineY); // SOPIR - 60mm
+				doc.line(155, lineY, 215, lineY); // DIPERIKSA OLEH - 60mm
+				doc.line(225, lineY, 280, lineY); // HORMAT KAMI - 55mm
+
+				// Labels untuk nama di bawah garis
+				doc.setFont('helvetica', 'normal');
+				doc.setFontSize(7);
+				doc.text('( )', 40, lineY + 8); // STEMPLE & Ttd PENERIMA
+				doc.text('( )', 110, lineY + 8); // SOPIR
+				doc.text('( )', 180, lineY + 8); // DIPERIKSA OLEH
+				doc.text('( )', 250, lineY + 8); // HORMAT KAMI
 			} else {
-				// Manual table drawing if autoTable is not available
-				let currentY = 115;
+				// Manual table drawing if autoTable is not available - compact layout
+				let currentY = 102; // Moved up for compact layout
 
 				// Draw table headers
 				doc.setFontSize(8);
 				doc.setFont('helvetica', 'bold');
 
-				// Header border
+				// Header border - extended for landscape with gray background
 				doc.setLineWidth(0.5);
-				doc.rect(14, currentY - 5, 182, 10);
+				doc.setFillColor(240, 240, 240); // Light gray
+				doc.rect(14, currentY - 5, 269, 10, 'FD'); // Fill and draw
 
-				// Header text for 8 columns
-				doc.text('No.', 16, currentY);
-				doc.text('KODE', 26, currentY);
-				doc.text('NAMA BARANG', 51, currentY);
-				doc.text('WARNA', 101, currentY);
-				doc.text('KEMASAN', 119, currentY);
-				doc.text('QTY', 139, currentY);
-				doc.text('SATUAN', 151, currentY);
-				doc.text('Total RP', 175, currentY);
+				// Header text for 6 columns - repositioned for landscape
+				doc.setTextColor(0, 0, 0); // Black text
+				doc.text('No.', 18, currentY);
+				doc.text('NAMA BARANG', 35, currentY);
+				doc.text('KEMASAN', 170, currentY);
+				doc.text('QTY', 215, currentY);
+				doc.text('SATUAN', 235, currentY);
+				doc.text('Total KG', 265, currentY);
 
 				currentY += 8;
 
 				// Draw table rows
 				doc.setFont('helvetica', 'normal');
+				doc.setFillColor(255, 255, 255); // White background for rows
 				tableData.forEach((row, index) => {
-					// Row border
-					doc.rect(14, currentY - 3, 182, 10);
+					// Row border - extended for landscape with alternating colors
+					if (index % 2 === 0) {
+						doc.setFillColor(250, 250, 250); // Very light gray for even rows
+					} else {
+						doc.setFillColor(255, 255, 255); // White for odd rows
+					}
+					doc.rect(14, currentY - 3, 269, 8, 'FD'); // Reduced height for compact layout
 
-					doc.text(row[0], 16, currentY + 2); // No.
-					doc.text(row[1], 26, currentY + 2); // KODE BARANG
-					doc.text(row[2], 51, currentY + 2); // NAMA BARANG
-					doc.text(row[3], 101, currentY + 2); // WARNA
-					doc.text(row[4], 119, currentY + 2); // KEMASAN
-					doc.text(row[5], 139, currentY + 2); // QUANTITY
-					doc.text(row[6], 151, currentY + 2); // SATUAN
-					doc.text(row[7], 175, currentY + 2); // TOTAL KG
-					currentY += 10;
+					doc.setFontSize(8); // Smaller font for compact layout
+					doc.text(row[0], 18, currentY + 1); // No.
+					doc.text(row[1], 35, currentY + 1); // NAMA BARANG
+					doc.text(row[2], 170, currentY + 1); // KEMASAN
+					doc.text(row[3], 215, currentY + 1); // QTY
+					doc.text(row[4], 235, currentY + 1); // SATUAN
+					doc.text(row[5], 265, currentY + 1); // TOTAL KG
+					currentY += 8; // Reduced spacing
 				});
 
-				// Total row
-				currentY += 5;
+				// Total row - compact layout
+				currentY += 3; // Reduced spacing
 				doc.setLineWidth(0.5);
-				doc.line(14, currentY, 196, currentY);
+				doc.line(14, currentY, 283, currentY);
 				doc.setFont('helvetica', 'bold');
-				doc.text('TOTAL RP', 140, currentY + 8);
-				doc.text(':', 165, currentY + 8);
-				doc.text('Rp ' + finalTotalRp.toLocaleString('id-ID'), 175, currentY + 8);
+				doc.setFontSize(9);
+				doc.text('TOTAL KG', 220, currentY + 6);
+				doc.text(':', 245, currentY + 6);
+				doc.text(finalTotalKg.toFixed(2), 255, currentY + 6);
 
-				// Customer delivery info
-				const deliveryY = currentY + 25;
+				// Customer delivery info - compact
+				const deliveryY = currentY + 12; // Reduced spacing further
 				doc.setFont('helvetica', 'normal');
 				doc.setFontSize(9);
 				doc.text(
@@ -1358,37 +1682,45 @@
 					deliveryY
 				);
 
-				// Note section
+				// Note section - compact
 				doc.setFont('helvetica', 'bold');
-				doc.text('NB.', 14, deliveryY + 12);
+				doc.text('NB.', 14, deliveryY + 6); // Reduced spacing
 				doc.setFont('helvetica', 'normal');
-				doc.text('KIRIM KE CUSTOMER', 30, deliveryY + 12);
+				doc.text('KIRIM KE CUSTOMER', 30, deliveryY + 6);
 
-				// Signature section - using underlines instead of boxes
-				const signY = deliveryY + 35;
+				// Signature section - layout diperbaiki dengan space yang cukup (manual table)
+				const signY = deliveryY + 18; // Reduced spacing for more room
 				doc.setFontSize(9);
 				doc.setFont('helvetica', 'normal');
 
-				// Signature labels
-				doc.text('STEMPLE & Ttd PENERIMA', 20, signY);
-				doc.text('SOPIR', 75, signY);
-				doc.text('DIPERIKSA OLEH', 120, signY);
-				doc.text('HORMAT KAMI', 165, signY);
+				// Signature labels - dengan spacing yang lebih baik untuk landscape
+				doc.text('STEMPLE & Ttd PENERIMA', 15, signY);
+				doc.text('SOPIR', 85, signY);
+				doc.text('DIPERIKSA OLEH', 155, signY);
+				doc.text('HORMAT KAMI', 225, signY);
 
-				// Signature underlines (instead of boxes)
-				const lineY = signY + 25;
-				doc.setLineWidth(0.3);
-				doc.line(20, lineY, 65, lineY); // STEMPLE & Ttd PENERIMA
-				doc.line(75, lineY, 110, lineY); // SOPIR
-				doc.line(120, lineY, 155, lineY); // DIPERIKSA OLEH
-				doc.line(165, lineY, 195, lineY); // HORMAT KAMI
+				// Ensure drawing color and stroke is properly set
+				doc.setDrawColor(0, 0, 0); // Black color
+				doc.setFillColor(0, 0, 0); // Black fill
 
-				// Names under signatures
-				doc.setFontSize(8);
-				doc.text('(                          )', 20, lineY + 8);
-				doc.text('(                    )', 75, lineY + 8);
-				doc.text('(                    )', 120, lineY + 8);
-				doc.text('(                    )', 165, lineY + 8);
+				// Single signature underlines - garis bawah yang tebal dan jelas
+				const lineY = signY + 20; // Spacing for signature lines
+				doc.setLineWidth(1.0); // Thick lines untuk visibility
+				
+				// Draw signature lines
+				doc.line(15, lineY, 80, lineY); // STEMPLE & Ttd PENERIMA - 65mm
+				doc.line(85, lineY, 145, lineY); // SOPIR - 60mm
+				doc.line(155, lineY, 215, lineY); // DIPERIKSA OLEH - 60mm
+				doc.line(225, lineY, 280, lineY); // HORMAT KAMI - 55mm
+
+				// Name labels under signature lines
+				doc.setFont('helvetica', 'normal');
+				doc.setFontSize(7);
+				doc.text('( )', 40, lineY + 8); // STEMPLE & Ttd PENERIMA
+				doc.text('( )', 110, lineY + 8); // SOPIR
+				doc.text('( )', 180, lineY + 8); // DIPERIKSA OLEH
+				doc.text('( )', 250, lineY + 8); // HORMAT KAMI
+				
 			}
 
 			// Save or print the PDF
@@ -1445,12 +1777,7 @@
 	}
 
 	// Load raw materials when component mounts
-	onMount(() => {
-		loadFinishedGoods().then(() => {
-			checkLowStockItems();
-		});
-		loadRawMaterials();
-	});
+	// onMount functionality already handled above
 </script>
 
 <svelte:head>
@@ -2008,13 +2335,12 @@
 							<!-- Customer & Sales Info -->
 							<div>
 								<label for="kode_customer" class="block text-sm font-medium text-gray-700 mb-1"
-									>Kode Customer *</label
+									>Kode Customer</label
 								>
 								<select
 									id="kode_customer"
 									bind:value={sjFormData.kode_customer}
 									on:change={handleCustomerChange}
-									required
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 								>
 									<option value="">Pilih Customer</option>
@@ -2040,30 +2366,52 @@
 
 							<div>
 								<label for="kode_sales" class="block text-sm font-medium text-gray-700 mb-1"
-									>Kode Sales *</label
+									>Kode Sales</label
 								>
 								<input
 									id="kode_sales"
 									type="text"
 									bind:value={sjFormData.kode_sales}
-									required
-									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-									placeholder="Masukkan kode sales"
+									readonly
+									class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+									placeholder="Kode sales akan terisi otomatis setelah memilih PO"
 								/>
 							</div>
 
 							<div>
 								<label for="nomor_po_customer" class="block text-sm font-medium text-gray-700 mb-1"
-									>Nomor PO Customer *</label
+									>Nomor PO Customer</label
 								>
-								<input
-									id="nomor_po_customer"
-									type="text"
-									bind:value={sjFormData.nomor_po_customer}
-									required
-									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-									placeholder="Masukkan nomor PO customer"
-								/>
+								{#if customerPOList.length > 0}
+									<select
+										id="nomor_po_customer"
+										bind:value={sjFormData.nomor_po_customer}
+										on:change={handlePOSelection}
+										class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+									>
+										<option value="">Pilih Nomor PO</option>
+										{#each customerPOList as po}
+											<option 
+												value={po.nomor_po_customer}
+												disabled={po.status === 'ready'}
+												class={po.status === 'ready' ? 'text-gray-400 bg-gray-100' : ''}
+											>
+												{po.nomor_po_customer} - {po.status || 'Status tidak tersedia'} 
+												{po.kode_sales ? `(Sales: ${po.kode_sales})` : ''} 
+												{po.status === 'ready' ? '(Tidak dapat dipilih)' : ''}
+											</option>
+										{/each}
+									</select>
+								{:else}
+									<input
+										id="nomor_po_customer"
+										type="text"
+										bind:value={sjFormData.nomor_po_customer}
+										class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+										placeholder={sjFormData.kode_customer ? "Tidak ada PO untuk customer ini" : "Pilih customer terlebih dahulu"}
+										readonly={sjFormData.kode_customer ? false : true}
+									/>
+								{/if}
 							</div>
 
 							<!-- Dates -->
@@ -2097,13 +2445,12 @@
 
 							<div>
 								<label for="tanggal_sj" class="block text-sm font-medium text-gray-700 mb-1"
-									>Tanggal SJ *</label
+									>Tanggal SJ</label
 								>
 								<input
 									id="tanggal_sj"
 									type="date"
 									bind:value={sjFormData.tanggal_sj}
-									required
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 								/>
 							</div>
@@ -2111,13 +2458,12 @@
 							<!-- Tax Info -->
 							<div>
 								<label for="nomor_pajak" class="block text-sm font-medium text-gray-700 mb-1"
-									>Nomor Pajak *</label
+									>Nomor Pajak</label
 								>
 								<input
 									id="nomor_pajak"
 									type="text"
 									bind:value={sjFormData.nomor_pajak}
-									required
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 									placeholder="Masukkan nomor pajak"
 								/>
@@ -2125,13 +2471,12 @@
 
 							<div>
 								<label for="tanggal_pajak" class="block text-sm font-medium text-gray-700 mb-1"
-									>Tanggal Pajak *</label
+									>Tanggal Pajak</label
 								>
 								<input
 									id="tanggal_pajak"
 									type="date"
 									bind:value={sjFormData.tanggal_pajak}
-									required
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 								/>
 							</div>
@@ -2180,13 +2525,12 @@
 							<!-- Payment Terms -->
 							<div>
 								<label for="term" class="block text-sm font-medium text-gray-700 mb-1"
-									>Term (hari) *</label
+									>Term (hari)</label
 								>
 								<input
 									id="term"
 									type="number"
 									bind:value={sjFormData.term}
-									required
 									min="0"
 									on:change={updateDueDate}
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -2196,60 +2540,17 @@
 
 							<div>
 								<label for="due_date" class="block text-sm font-medium text-gray-700 mb-1"
-									>Due Date *</label
+									>Due Date</label
 								>
 								<input
 									id="due_date"
 									type="date"
 									bind:value={sjFormData.due_date}
-									required
 									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 								/>
 							</div>
 
-							<!-- Tax Settings -->
-							<div class="flex items-center space-x-4">
-								<div class="flex items-center">
-									<input
-										id="ppn_enable"
-										type="checkbox"
-										bind:checked={sjFormData.ppn_enable}
-										on:change={calculateTotals}
-										class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-									/>
-									<label for="ppn_enable" class="ml-2 block text-sm text-gray-700">PPN Enable</label
-									>
-								</div>
-
-								<div class="flex items-center">
-									<input
-										id="include_ppn"
-										type="checkbox"
-										bind:checked={sjFormData.include_ppn}
-										on:change={calculateTotals}
-										class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-									/>
-									<label for="include_ppn" class="ml-2 block text-sm text-gray-700"
-										>Include PPN</label
-									>
-								</div>
-							</div>
-
-							<div>
-								<label for="tarif_ppn" class="block text-sm font-medium text-gray-700 mb-1"
-									>Tarif PPN (%) *</label
-								>
-								<input
-									id="tarif_ppn"
-									type="number"
-									bind:value={sjFormData.tarif_ppn}
-									required
-									min="0"
-									on:change={calculateTotals}
-									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-									placeholder="11"
-								/>
-							</div>
+							<!-- Tax Settings dihapus sesuai permintaan -->
 						</div>
 
 						<!-- Item Table -->
@@ -2271,11 +2572,19 @@
 										<tr>
 											<th
 												class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+												>Tipe Item</th
+											>
+											<th
+												class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
 												>Finish Good</th
 											>
 											<th
 												class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
 												>Raw Material</th
+											>
+											<th
+												class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+												>Consumable & Sparepart</th
 											>
 											<th
 												class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -2295,15 +2604,7 @@
 											>
 											<th
 												class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-												>Harga</th
-											>
-											<th
-												class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-												>Diskon (%)</th
-											>
-											<th
-												class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-												>Total</th
+												>Total (Satuan x Qty)</th
 											>
 											<th
 												class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -2314,90 +2615,144 @@
 									<tbody class="bg-white divide-y divide-gray-200">
 										{#each sjFormData.items as item, index}
 											<tr>
+												<!-- Tipe Item -->
+												<td class="px-3 py-2">
+													<select
+														bind:value={item.item_type}
+														on:change={() => handleItemTypeSelect(index, item.item_type)}
+														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+													>
+														<option value="finished_good">Finish Good</option>
+														<option value="raw_material">Raw Material</option>
+														<option value="consumable_sparepart">Consumable & Sparepart</option>
+													</select>
+												</td>
+
+												<!-- Finish Good -->
 												<td class="px-3 py-2">
 													<select
 														bind:value={item.finish_good_id}
 														on:change={() => handleFinishGoodSelect(index, item.finish_good_id)}
-														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+														disabled={item.item_type !== 'finished_good'}
+														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !== 'finished_good' ? 'bg-gray-100' : ''}"
 													>
-														<option value="">Pilih Finish Good</option>
-														{#each finishedGoods as fg}
-															<option value={fg.id} disabled={fg.sisa_stok < item.quantity}>
-																{fg.nama_barang}
-																{fg.sisa_stok < item.quantity ? '(Stok tidak cukup)' : ''}
-															</option>
-														{/each}
+														<option value="">
+															{item.item_type === 'finished_good' ? 'Pilih Finish Good' : '-'}
+														</option>
+														{#if item.item_type === 'finished_good'}
+															{#each finishedGoods as fg}
+																<option value={fg.id} disabled={fg.sisa_stok < item.quantity}>
+																	{fg.nama_barang}
+																	{fg.sisa_stok < item.quantity ? '(Stok tidak cukup)' : ''}
+																</option>
+															{/each}
+														{/if}
 													</select>
 												</td>
+
+												<!-- Raw Material -->
 												<td class="px-3 py-2">
 													<select
 														bind:value={item.raw_material_id}
 														on:change={() => handleRawMaterialSelect(index, item.raw_material_id)}
-														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+														disabled={item.item_type !== 'raw_material'}
+														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !== 'raw_material' ? 'bg-gray-100' : ''}"
 													>
-														<option value="">Pilih Raw Material</option>
-														{#each rawMaterials as rm}
-															<option value={rm.id} disabled={rm.sisa_stok < item.quantity}>
-																{rm.nama}
-																{rm.sisa_stok < item.quantity ? '(Stok tidak cukup)' : ''}
-															</option>
-														{/each}
+														<option value="">
+															{item.item_type === 'raw_material' ? 'Pilih Raw Material' : '-'}
+														</option>
+														{#if item.item_type === 'raw_material'}
+															{#each rawMaterials as rm}
+																<option value={rm.id} disabled={rm.sisa_stok < item.quantity}>
+																	{rm.nama}
+																	{rm.sisa_stok < item.quantity ? '(Stok tidak cukup)' : ''}
+																</option>
+															{/each}
+														{/if}
 													</select>
 												</td>
+
+												<!-- Consumable & Sparepart -->
+												<td class="px-3 py-2">
+													<select
+														bind:value={item.consumable_sparepart_id}
+														on:change={() => handleConsumableSelect(index, item.consumable_sparepart_id)}
+														disabled={item.item_type !== 'consumable_sparepart'}
+														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !== 'consumable_sparepart' ? 'bg-gray-100' : ''}"
+													>
+														<option value="">
+															{item.item_type === 'consumable_sparepart' ? 'Pilih Consumable/Sparepart' : '-'}
+														</option>
+														{#if item.item_type === 'consumable_sparepart'}
+															{#each consumableSpareparts as cs}
+																<option value={cs.id} disabled={cs.sisa_stok < item.quantity}>
+																	{cs.nama} - {cs.kategori}
+																	{cs.sisa_stok < item.quantity ? '(Stok tidak cukup)' : ''}
+																</option>
+															{/each}
+														{/if}
+													</select>
+												</td>
+
+												<!-- Warna -->
 												<td class="px-3 py-2">
 													<input
 														type="text"
 														bind:value={item.warna}
 														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+														placeholder="Warna"
 													/>
 												</td>
+
+												<!-- Kemasan -->
 												<td class="px-3 py-2">
 													<input
 														type="text"
 														bind:value={item.kemasan}
 														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+														placeholder="Kemasan"
 													/>
 												</td>
+
+												<!-- Satuan -->
 												<td class="px-3 py-2">
 													<input
 														type="text"
 														bind:value={item.satuan}
 														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+														placeholder="Satuan"
 													/>
 												</td>
+
+												<!-- Quantity -->
 												<td class="px-3 py-2">
 													<input
 														type="number"
 														bind:value={item.quantity}
 														min="1"
-														on:change={() => calculateItemTotal(index)}
 														class="w-20 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
 													/>
 												</td>
+
+												<!-- Total -->
 												<td class="px-3 py-2">
-													<input
-														type="number"
-														bind:value={item.harga}
-														min="0"
-														on:change={() => calculateItemTotal(index)}
-														class="w-24 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-													/>
+													<span class="text-sm font-medium">
+														{#if item.satuan && item.quantity}
+															{(() => {
+																// Extract number from satuan (e.g., "2 Kg" -> 2)
+																const satuanMatch = item.satuan.match(/(\d+(?:\.\d+)?)/);
+																const satuanValue = satuanMatch ? parseFloat(satuanMatch[1]) : 1;
+																const unit = item.satuan.replace(/[\d\.\s]+/, '').trim() || 'unit';
+																const total = satuanValue * item.quantity;
+																return `${total} ${unit}`;
+															})()}
+														{:else}
+															{item.quantity} {item.satuan || 'unit'}
+														{/if}
+													</span>
 												</td>
-												<td class="px-3 py-2">
-													<input
-														type="number"
-														bind:value={item.diskon}
-														min="0"
-														max="100"
-														on:change={() => calculateItemTotal(index)}
-														class="w-20 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-													/>
-												</td>
-												<td class="px-3 py-2">
-													<span class="text-sm font-medium"
-														>{item.total_harga.toLocaleString('id-ID')}</span
-													>
-												</td>
+
+												<!-- Aksi -->
 												<td class="px-3 py-2">
 													<button
 														type="button"
@@ -2418,34 +2773,7 @@
 						<!-- Summary -->
 						<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
 							<div></div>
-							<div class="space-y-3">
-								<div class="flex justify-between">
-									<span class="text-sm font-medium text-gray-700">Dasar Pengenaan Pajak:</span>
-									<span class="text-sm"
-										>Rp {sjFormData.dasar_pengenaan_pajak.toLocaleString('id-ID')}</span
-									>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-sm font-medium text-gray-700"
-										>Nominal PPN ({sjFormData.tarif_ppn}%):</span
-									>
-									<span class="text-sm">Rp {sjFormData.nominal_ppn.toLocaleString('id-ID')}</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-sm font-medium text-gray-700"
-										>Harga Setelah Pajak & Diskon:</span
-									>
-									<span class="text-sm font-bold"
-										>Rp {sjFormData.harga_setelah_pajak_diskon.toLocaleString('id-ID')}</span
-									>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-sm font-medium text-gray-700">Sisa Sales Order:</span>
-									<span class="text-sm"
-										>Rp {sjFormData.sisa_sales_order.toLocaleString('id-ID')}</span
-									>
-								</div>
-							</div>
+							<!-- Informasi pajak dihapus sesuai permintaan -->
 						</div>
 
 						<div class="flex justify-end gap-3">
@@ -2549,6 +2877,14 @@
 				</button>
 			</div>
 		</div>
+		
+		<!-- Data Summary -->
+		<div class="mt-4 p-3 bg-blue-50 rounded-md">
+			<div class="text-sm text-blue-800">
+				<strong>Data Summary:</strong> 
+				Loaded {finishedGoods.length} dari {totalCountInDirectus} total items di Directus
+			</div>
+		</div>
 	</div>
 
 	<!-- Stats Cards -->
@@ -2618,23 +2954,11 @@
 							>
 							<th
 								class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-								>Kode Produk</th
-							>
-							<th
-								class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-								>Nama Produk</th
-							>
-							<th
-								class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
 								>Kode Warna</th
 							>
 							<th
 								class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
 								>Warna</th
-							>
-							<th
-								class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-								>Produk Group</th
 							>
 							<th
 								class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -2676,10 +3000,6 @@
 								>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.kemasan}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.quantity}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.kode_produk}</td
-								>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.nama_produk}</td
-								>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.kode_warna}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
 									<div class="flex items-center">
@@ -2690,9 +3010,6 @@
 										{item.warna}
 									</div>
 								</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900"
-									>{item.produk_group}</td
-								>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900"
 									>{item.nama_produk_group}</td
 								>
@@ -3215,5 +3532,39 @@
 </div>
 
 <style>
-	/* Custom styles if needed */
+	/* Print optimization styles */
+	@media print {
+		@page {
+			size: A4 landscape;
+			margin: 10mm;
+		}
+		
+		body {
+			-webkit-print-color-adjust: exact;
+			color-adjust: exact;
+		}
+	}
+	
+	/* Compact layout styles for better space utilization */
+	.compact-form {
+		max-width: 100%;
+		margin: 0 auto;
+	}
+	
+	.form-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+		gap: 1rem;
+	}
+	
+	.compact-table {
+		font-size: 0.9em;
+		line-height: 1.2;
+	}
+	
+	.compact-table th,
+	.compact-table td {
+		padding: 0.3rem;
+		border: 1px solid #ddd;
+	}
 </style>

@@ -25,20 +25,15 @@
 		}).format(amount);
 	}
 
-	// Function to calculate item total
-	function getItemTotal(item) {
-		// If total is already provided by API, use it
-		if (item.total !== undefined && item.total !== null) {
-			return item.total;
-		}
-		
-		// Otherwise calculate it
-		const quantity = item.qty || item.quantity || 0;
-		const price = item.harga_satuan || item.price || item.harga || 0;
-		const discount = item.discount || item.diskon || 0;
-		const subtotal = quantity * price;
-		const discountAmount = (subtotal * discount) / 100;
-		return subtotal - discountAmount;
+	// Function to get item quantity total
+	function getItemQuantityTotal(item) {
+		return item.qty || item.quantity || 0;
+	}
+
+	// Function to calculate grand total as sum of all quantities
+	function calculateGrandTotal(details) {
+		if (!details || !Array.isArray(details)) return 0;
+		return details.reduce((total, item) => total + getItemQuantityTotal(item), 0);
 	}
 </script>
 
@@ -147,14 +142,6 @@
 										>
 										<th
 											class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-											>Harga</th
-										>
-										<th
-											class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-											>Diskon</th
-										>
-										<th
-											class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
 											>Total</th
 										>
 									</tr>
@@ -175,14 +162,8 @@
 											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
 												{item.unit || item.satuan || '-'}
 											</td>
-											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-												{formatCurrency(item.harga_satuan || item.price || item.harga || 0)}
-											</td>
-											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-												{item.discount || item.diskon || 0}%
-											</td>
 											<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-												{formatCurrency(item.total || getItemTotal(item))}
+												{getItemQuantityTotal(item)}
 											</td>
 										</tr>
 									{/each}
@@ -190,13 +171,13 @@
 								<tfoot class="bg-gray-50">
 									<tr>
 										<td
-											colspan="7"
+											colspan="5"
 											class="px-4 py-3 text-right text-sm font-semibold text-gray-900"
 										>
-											Grand Total:
+											Grand Total (Quantity):
 										</td>
 										<td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-indigo-600">
-											{formatCurrency(soData.grand_total || 0)}
+											{calculateGrandTotal(soData.details)} pcs
 										</td>
 									</tr>
 								</tfoot>
