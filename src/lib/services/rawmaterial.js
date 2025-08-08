@@ -25,6 +25,66 @@ export function loadAuthToken() {
 }
 
 /**
+ * Test basic connection to Directus server
+ * @returns {Promise<Object>} Connection test result
+ */
+export async function testDirectusConnection() {
+	try {
+		loadAuthToken();
+		
+		console.log('Testing Directus connection...');
+		console.log('Base URL:', BASE_URL);
+		console.log('Token available:', authToken ? 'Yes' : 'No');
+		
+		// Test basic server connection first
+		const serverResponse = await fetch(`${BASE_URL}/server/info`, {
+			method: 'GET',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		});
+		
+		if (!serverResponse.ok) {
+			throw new Error(`Server connection failed: ${serverResponse.status}`);
+		}
+		
+		// Test authenticated endpoint
+		const authResponse = await fetch(`${BASE_URL}/items/rawmaterial?limit=1`, {
+			method: 'GET',
+			headers: {
+				'Authorization': `Bearer ${authToken}`,
+				'Content-Type': 'application/json'
+			}
+		});
+
+		const result = {
+			serverConnected: serverResponse.ok,
+			authenticationWorking: authResponse.ok,
+			status: authResponse.status,
+			message: authResponse.ok ? 'Connection successful' : `Auth failed: HTTP ${authResponse.status}`
+		};
+		
+		if (!authResponse.ok) {
+			const errorText = await authResponse.text();
+			result.error = errorText;
+		}
+		
+		console.log('Connection test result:', result);
+		return result;
+		
+	} catch (error) {
+		console.error('Connection test error:', error);
+		return {
+			serverConnected: false,
+			authenticationWorking: false,
+			status: 0,
+			message: error.message,
+			error: error.message
+		};
+	}
+}
+
+/**
  * Get all raw materials from Directus
  * @returns {Promise<Array>} Array of raw materials
  */
@@ -123,11 +183,12 @@ export async function createRawMaterial(rawMaterialData) {
 			sisa_po: Number(rawMaterialData.sisa_po) || 0,
 			minimum_stok: Number(rawMaterialData.minimum_stok) || 0,
 			in_liter: Number(rawMaterialData.in_liter) || 0,
-			in_kg: Number(rawMaterialData.in_kg) || 0,
-			status: 'published'
+			in_kg: Number(rawMaterialData.in_kg) || 0
+			// Removed status: 'published' to see if it's causing issues
 		};
 
 		console.log('Sanitized data to send:', sanitizedData);
+		console.log('Request URL:', `${BASE_URL}/items/rawmaterial`);
 		
 		const response = await fetch(`${BASE_URL}/items/rawmaterial`, {
 			method: 'POST',
@@ -139,11 +200,20 @@ export async function createRawMaterial(rawMaterialData) {
 		});
 
 		console.log('Create raw material response status:', response.status);
+		console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
 		if (!response.ok) {
 			const errorText = await response.text();
 			console.error('Create raw material error response:', errorText);
-			throw new Error(`HTTP ${response.status}: ${errorText}`);
+			
+			// Try to parse error for more details
+			try {
+				const errorJson = JSON.parse(errorText);
+				console.error('Parsed error:', errorJson);
+				throw new Error(`HTTP ${response.status}: ${errorJson.errors?.[0]?.message || errorText}`);
+			} catch (parseError) {
+				throw new Error(`HTTP ${response.status}: ${errorText}`);
+			}
 		}
 
 		const result = await response.json();
@@ -152,6 +222,7 @@ export async function createRawMaterial(rawMaterialData) {
 		return result.data;
 	} catch (error) {
 		console.error('Error creating raw material:', error);
+		console.error('Error stack:', error.stack);
 		throw error;
 	}
 }
@@ -165,8 +236,30 @@ export async function getAllRawMaterials() {
 		loadAuthToken();
 		
 		console.log('Fetching all raw materials from Directus...');
+		console.log('Using URL:', `${BASE_URL}/items/rawmaterial`);
+		console.log('Using token:', authToken ? 'Token available' : 'No token');
 		
-		const response = await fetch(`${BASE_URL}/items/rawmaterial?fields=*&filter[status][_eq]=published&sort=kode`, {
+		// First, get the total count of items to ensure we fetch all data
+		const countResponse = await fetch(`${BASE_URL}/items/rawmaterial?aggregate[count]=*`, {
+			method: 'GET',
+			headers: {
+				'Authorization': `Bearer ${authToken}`,
+				'Content-Type': 'application/json'
+			}
+		});
+
+		let totalCount = 0;
+		if (countResponse.ok) {
+			const countResult = await countResponse.json();
+			totalCount = countResult.data?.[0]?.count || 0;
+			console.log('Total items in Directus:', totalCount);
+		}
+
+		// Set limit to -1 to get all items, or use a very high limit
+		const limit = totalCount > 0 ? Math.max(totalCount, 1000) : 1000;
+		
+		// Try without status filter first to see if data exists, and with high limit
+		const response = await fetch(`${BASE_URL}/items/rawmaterial?fields=*&sort=kode&limit=${limit}`, {
 			method: 'GET',
 			headers: {
 				'Authorization': `Bearer ${authToken}`,
@@ -175,19 +268,114 @@ export async function getAllRawMaterials() {
 		});
 
 		console.log('All raw materials fetch response status:', response.status);
+		console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
 		if (!response.ok) {
 			const errorText = await response.text();
 			console.error('All raw materials fetch error response:', errorText);
+			
+			// Try to get more specific error information
+			try {
+				const errorJson = JSON.parse(errorText);
+				console.error('Parsed error:', errorJson);
+			} catch (e) {
+				console.error('Could not parse error response as JSON');
+			}
+			
 			throw new Error(`HTTP ${response.status}: ${errorText}`);
 		}
 
 		const result = await response.json();
-		console.log('All raw materials fetch result:', result);
+		console.log('All raw materials fetch result structure:', {
+			hasData: !!result.data,
+			dataLength: result.data ? result.data.length : 0,
+			meta: result.meta,
+			firstItem: result.data && result.data.length > 0 ? result.data[0] : null,
+			expectedCount: totalCount,
+			actualCount: result.data ? result.data.length : 0
+		});
+
+		// Check if we got all the data
+		if (result.data && totalCount > 0 && result.data.length < totalCount) {
+			console.warn(`Warning: Expected ${totalCount} items but got ${result.data.length}`);
+			
+			// Try to fetch in batches if we didn't get all data
+			const batchSize = 100;
+			const allData = [...result.data];
+			
+			for (let offset = result.data.length; offset < totalCount; offset += batchSize) {
+				console.log(`Fetching batch: offset ${offset}, limit ${batchSize}`);
+				
+				const batchResponse = await fetch(`${BASE_URL}/items/rawmaterial?fields=*&sort=kode&limit=${batchSize}&offset=${offset}`, {
+					method: 'GET',
+					headers: {
+						'Authorization': `Bearer ${authToken}`,
+						'Content-Type': 'application/json'
+					}
+				});
+				
+				if (batchResponse.ok) {
+					const batchResult = await batchResponse.json();
+					if (batchResult.data && batchResult.data.length > 0) {
+						allData.push(...batchResult.data);
+						console.log(`Added ${batchResult.data.length} items, total: ${allData.length}`);
+					} else {
+						break; // No more data
+					}
+				} else {
+					console.error('Batch fetch failed:', batchResponse.status);
+					break;
+				}
+			}
+			
+			console.log(`Final data count: ${allData.length} of expected ${totalCount}`);
+			return allData;
+		}
 
 		return result.data || [];
 	} catch (error) {
 		console.error('Error fetching all raw materials:', error);
+		console.error('Error stack:', error.stack);
+		throw error;
+	}
+}
+
+/**
+ * Get all raw materials - Simple version without batching
+ * @returns {Promise<Array>} Array of raw materials with all fields
+ */
+export async function getAllRawMaterialsSimple() {
+	try {
+		loadAuthToken();
+		
+		console.log('Fetching all raw materials (simple version)...');
+		
+		// Use limit=-1 to get all items (Directus supports this)
+		const response = await fetch(`${BASE_URL}/items/rawmaterial?fields=*&sort=kode&limit=-1`, {
+			method: 'GET',
+			headers: {
+				'Authorization': `Bearer ${authToken}`,
+				'Content-Type': 'application/json'
+			}
+		});
+
+		console.log('Simple fetch response status:', response.status);
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			console.error('Simple fetch error:', errorText);
+			throw new Error(`HTTP ${response.status}: ${errorText}`);
+		}
+
+		const result = await response.json();
+		console.log('Simple fetch result:', {
+			hasData: !!result.data,
+			dataLength: result.data ? result.data.length : 0
+		});
+
+		return result.data || [];
+	} catch (error) {
+		console.error('Error in simple fetch:', error);
 		throw error;
 	}
 }

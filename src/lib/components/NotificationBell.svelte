@@ -324,12 +324,6 @@
 										<div class="text-xs text-gray-500">Tanggal Kirim: Belum ditentukan</div>
 									{/if}
 									<div class="text-xs text-gray-600">Sales: {so.sales_name} ({so.sales_code})</div>
-									<div class="text-xs font-medium text-indigo-800">
-										Total: {new Intl.NumberFormat('id-ID', {
-											style: 'currency',
-											currency: 'IDR'
-										}).format(so.grand_total)}
-									</div>
 									{#if so.details && so.details.length > 0}
 										<div class="text-xs text-gray-500 mt-1">
 											Items: {so.details.length} produk

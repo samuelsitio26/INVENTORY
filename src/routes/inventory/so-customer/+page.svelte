@@ -80,6 +80,42 @@
 		showDetailModal = true;
 	}
 
+	function createSuratJalan(so) {
+		// Prepare data to be passed to FinishedGood page for SJ creation
+		const sjData = {
+			// Customer information
+			kode_customer: so.kode_customer || '',
+			nama_customer: so.company_name || so.customer_name || '',
+			
+			// Sales information
+			kode_sales: so.sales_code || '',
+			nama_sales: so.sales_name || '',
+			
+			// SO information
+			nomor_po_customer: so.nomor_po_customer || '',
+			nomor_so: so.nomor_so || '',
+			tanggal_so: so.tanggal_so || '',
+			tanggal_kirim: so.tanggal_kirim || '',
+			
+			// Items list with qty (automatically set to finished goods)
+			items: so.details ? so.details.map(item => ({
+				kode_barang: item.kode_barang || item.product_code || item.kode_produk || '',
+				nama_barang: item.nama_barang || item.product_name || item.nama_produk || '',
+				qty: item.qty || item.quantity || 0,
+				satuan: item.unit || item.satuan || 'pcs',
+				warna: item.warna || '',
+				kemasan: item.kemasan || '',
+				harga: item.harga || item.price || 0
+			})) : []
+		};
+
+		// Store data in localStorage for retrieval in FinishedGood page
+		localStorage.setItem('so_data_for_sj', JSON.stringify(sjData));
+		
+		// Navigate to FinishedGood page where SJ form will be auto-opened
+		window.location.href = '/inventory/finishedgood';
+	}
+
 	async function updateSOStatus(soId, newStatus) {
 		updatingStatus[soId] = true;
 
@@ -122,13 +158,6 @@
 			default:
 				return 'bg-gray-100 text-gray-800';
 		}
-	}
-
-	function formatCurrency(amount) {
-		return new Intl.NumberFormat('id-ID', {
-			style: 'currency',
-			currency: 'IDR'
-		}).format(amount);
 	}
 
 	// Filter and search
@@ -259,252 +288,279 @@
 			</div>
 		</div>
 	{:else}
-		<!-- SO Customer Table -->
-		<div class="bg-white shadow overflow-hidden sm:rounded-lg">
-			<div class="overflow-x-auto">
-				<table class="min-w-full divide-y divide-gray-200">
-					<thead class="bg-gray-50">
-						<tr>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-							>
-								Nomor SO
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-							>
-								Customer
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-							>
-								Sales
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-							>
-								Tanggal SO
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-							>
-								Tanggal Kirim
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-							>
-								Total
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-							>
-								Items
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-							>
-								Status
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-							>
-								Aksi
-							</th>
-						</tr>
-					</thead>
-					<tbody class="bg-white divide-y divide-gray-200">
-						{#each paginatedSOs as so}
-							<tr class="hover:bg-gray-50">
-								<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-									{so.nomor_so}
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-									<div>
-										<div class="font-medium text-gray-900">
-											{so.company_name || so.customer_name || '-'}
+		<!-- SO Customer Cards View -->
+		<div class="grid gap-6">
+			{#each paginatedSOs as so}
+				<div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+					<div class="p-6">
+						<!-- Header -->
+						<div class="flex items-start justify-between mb-4">
+							<div>
+								<h3 class="text-lg font-semibold text-gray-900">SO: {so.nomor_so}</h3>
+								<p class="text-sm text-gray-600">
+									{so.company_name || so.customer_name || '-'}
+									{#if so.nomor_po_customer}
+										<span class="text-gray-400">• PO: {so.nomor_po_customer}</span>
+									{/if}
+								</p>
+							</div>
+							<div class="flex items-center space-x-2">
+								<span
+									class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getStatusColor(
+										so.status || 'pending'
+									)}"
+								>
+									{so.status === 'ready' ? 'Ready' : 'Pending'}
+								</span>
+								<div class="relative">
+									<button
+										on:click={() => toggleDropdown(so.id)}
+										class="text-gray-400 hover:text-gray-600 p-1"
+										aria-label="More actions"
+									>
+										<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+											<path
+												d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"
+											/>
+										</svg>
+									</button>
+
+									{#if openDropdowns[so.id]}
+										<div
+											class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200"
+										>
+											<div class="py-1">
+												<button
+													on:click={() => {
+														openDetailModal(so);
+														closeDropdown(so.id);
+													}}
+													class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												>
+													<svg
+														class="w-4 h-4 mr-3"
+														fill="none"
+														stroke="currentColor"
+														viewBox="0 0 24 24"
+													>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+														/>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+														/>
+													</svg>
+													View Detail
+												</button>
+
+												<button
+													on:click={() => {
+														createSuratJalan(so);
+														closeDropdown(so.id);
+													}}
+													class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												>
+													<svg
+														class="w-4 h-4 mr-3"
+														fill="none"
+														stroke="currentColor"
+														viewBox="0 0 24 24"
+													>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+														/>
+													</svg>
+													Buat SJ
+												</button>
+
+												{#if so.status !== 'ready'}
+													<button
+														on:click={() => {
+															updateSOStatus(so.id, 'ready');
+															closeDropdown(so.id);
+														}}
+														disabled={updatingStatus[so.id]}
+														class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+													>
+														{#if updatingStatus[so.id]}
+															<svg
+																class="animate-spin w-4 h-4 mr-3"
+																fill="none"
+																viewBox="0 0 24 24"
+															>
+																<circle
+																	class="opacity-25"
+																	cx="12"
+																	cy="12"
+																	r="10"
+																	stroke="currentColor"
+																	stroke-width="4"
+																></circle>
+																<path
+																	class="opacity-75"
+																	fill="currentColor"
+																	d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+																></path>
+															</svg>
+														{:else}
+															<svg
+																class="w-4 h-4 mr-3"
+																fill="none"
+																stroke="currentColor"
+																viewBox="0 0 24 24"
+															>
+																<path
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	stroke-width="2"
+																	d="M5 13l4 4L19 7"
+																/>
+															</svg>
+														{/if}
+														Set Ready
+													</button>
+												{:else}
+													<button
+														on:click={() => {
+															updateSOStatus(so.id, 'pending');
+															closeDropdown(so.id);
+														}}
+														disabled={updatingStatus[so.id]}
+														class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+													>
+														{#if updatingStatus[so.id]}
+															<svg
+																class="animate-spin w-4 h-4 mr-3"
+																fill="none"
+																viewBox="0 0 24 24"
+															>
+																<circle
+																	class="opacity-25"
+																	cx="12"
+																	cy="12"
+																	r="10"
+																	stroke="currentColor"
+																	stroke-width="4"
+																></circle>
+																<path
+																	class="opacity-75"
+																	fill="currentColor"
+																	d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+																></path>
+															</svg>
+														{:else}
+															<svg
+																class="w-4 h-4 mr-3"
+																fill="none"
+																stroke="currentColor"
+																viewBox="0 0 24 24"
+															>
+																<path
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	stroke-width="2"
+																	d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+																/>
+															</svg>
+														{/if}
+														Set Pending
+													</button>
+												{/if}
+											</div>
 										</div>
-										{#if so.nomor_po_customer}
-											<div class="text-xs text-gray-500">PO: {so.nomor_po_customer}</div>
-										{/if}
-									</div>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-									{so.sales_name || '-'} ({so.sales_code || '-'})
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+									{/if}
+								</div>
+							</div>
+						</div>
+
+						<!-- SO Information -->
+						<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+							<div>
+								<label class="text-xs font-medium text-gray-500 uppercase">Tanggal SO</label>
+								<p class="text-sm text-gray-900">
 									{new Date(so.tanggal_so).toLocaleDateString('id-ID')}
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+								</p>
+							</div>
+							<div>
+								<label class="text-xs font-medium text-gray-500 uppercase">Tanggal Kirim</label>
+								<p class="text-sm text-gray-900">
 									{so.tanggal_kirim
 										? new Date(so.tanggal_kirim).toLocaleDateString('id-ID')
 										: 'Belum ditentukan'}
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-									{formatCurrency(so.grand_total || 0)}
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-									{so.details?.length || 0} produk
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<span
-										class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getStatusColor(
-											so.status || 'pending'
-										)}"
-									>
-										{so.status === 'ready' ? 'Ready' : 'Pending'}
-									</span>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-									<div class="relative">
-										<button
-											on:click={() => toggleDropdown(so.id)}
-											class="text-gray-400 hover:text-gray-600 p-1"
-											aria-label="More actions"
-										>
-											<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-												<path
-													d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"
-												/>
-											</svg>
-										</button>
+								</p>
+							</div>
+							<div>
+								<label class="text-xs font-medium text-gray-500 uppercase">Sales</label>
+								<p class="text-sm text-gray-900">{so.sales_name || '-'} ({so.sales_code || '-'})</p>
+							</div>
+							<div>
+								<label class="text-xs font-medium text-gray-500 uppercase">Total Items</label>
+								<p class="text-sm text-gray-900">{so.details?.length || 0} produk</p>
+							</div>
+						</div>
 
-										{#if openDropdowns[so.id]}
-											<div
-												class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200"
-											>
-												<div class="py-1">
-													<button
-														on:click={() => {
-															openDetailModal(so);
-															closeDropdown(so.id);
-														}}
-														class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-													>
-														<svg
-															class="w-4 h-4 mr-3"
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-															/>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-															/>
-														</svg>
-														View Detail
-													</button>
-
-													{#if so.status !== 'ready'}
-														<button
-															on:click={() => {
-																updateSOStatus(so.id, 'ready');
-																closeDropdown(so.id);
-															}}
-															disabled={updatingStatus[so.id]}
-															class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-														>
-															{#if updatingStatus[so.id]}
-																<svg
-																	class="animate-spin w-4 h-4 mr-3"
-																	fill="none"
-																	viewBox="0 0 24 24"
-																>
-																	<circle
-																		class="opacity-25"
-																		cx="12"
-																		cy="12"
-																		r="10"
-																		stroke="currentColor"
-																		stroke-width="4"
-																	></circle>
-																	<path
-																		class="opacity-75"
-																		fill="currentColor"
-																		d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-																	></path>
-																</svg>
-															{:else}
-																<svg
-																	class="w-4 h-4 mr-3"
-																	fill="none"
-																	stroke="currentColor"
-																	viewBox="0 0 24 24"
-																>
-																	<path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		stroke-width="2"
-																		d="M5 13l4 4L19 7"
-																	/>
-																</svg>
-															{/if}
-															Set Ready
-														</button>
-													{:else}
-														<button
-															on:click={() => {
-																updateSOStatus(so.id, 'pending');
-																closeDropdown(so.id);
-															}}
-															disabled={updatingStatus[so.id]}
-															class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-														>
-															{#if updatingStatus[so.id]}
-																<svg
-																	class="animate-spin w-4 h-4 mr-3"
-																	fill="none"
-																	viewBox="0 0 24 24"
-																>
-																	<circle
-																		class="opacity-25"
-																		cx="12"
-																		cy="12"
-																		r="10"
-																		stroke="currentColor"
-																		stroke-width="4"
-																	></circle>
-																	<path
-																		class="opacity-75"
-																		fill="currentColor"
-																		d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-																	></path>
-																</svg>
-															{:else}
-																<svg
-																	class="w-4 h-4 mr-3"
-																	fill="none"
-																	stroke="currentColor"
-																	viewBox="0 0 24 24"
-																>
-																	<path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		stroke-width="2"
-																		d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-																	/>
-																</svg>
-															{/if}
-															Set Pending
-														</button>
-													{/if}
+						<!-- Product List -->
+						{#if so.details && so.details.length > 0}
+							<div>
+								<h4 class="text-sm font-medium text-gray-700 mb-3">Daftar Barang:</h4>
+								<div class="grid gap-2">
+									{#each so.details as item, index}
+										<div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+											<div class="flex-1">
+												<div class="flex items-center space-x-3">
+													<span class="text-xs font-medium text-gray-500 bg-white px-2 py-1 rounded">
+														{index + 1}
+													</span>
+													<div>
+														<p class="text-sm font-medium text-gray-900">
+															{item.kode_barang || item.product_code || item.kode_produk || '-'}
+														</p>
+														<p class="text-sm text-gray-600">
+															{item.nama_barang || item.product_name || item.nama_produk || '-'}
+														</p>
+													</div>
 												</div>
 											</div>
-										{/if}
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
+											<div class="text-right">
+												<p class="text-sm font-semibold text-gray-900">
+													{item.qty || item.quantity || 0}
+												</p>
+												<p class="text-xs text-gray-500">{item.unit || item.satuan || '-'}</p>
+											</div>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{:else}
+							<div class="text-center py-4 text-gray-500">
+								<svg
+									class="mx-auto h-8 w-8 text-gray-400"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2M4 13h2m13-8v2a2 2 0 002 2h-1l-4 4-4-4h-1a2 2 0 002-2V5z"
+									/>
+								</svg>
+								<p class="mt-1 text-sm">Tidak ada detail produk</p>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/each}
 		</div>
 
 		<!-- Pagination -->

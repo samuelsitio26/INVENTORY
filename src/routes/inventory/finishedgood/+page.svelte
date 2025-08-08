@@ -76,12 +76,9 @@
 		tanggal_po_customer: new Date().toISOString().split('T')[0],
 		nomor_sj: '',
 		tanggal_sj: new Date().toISOString().split('T')[0],
-		nomor_pajak: '',
-		tanggal_pajak: new Date().toISOString().split('T')[0],
 		tanggal_invoice: new Date().toISOString().split('T')[0],
 		nama_sopir: '',
 		no_kendaraan: '',
-		term: 30, // Default 30 days
 		due_date: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
 		items: [
 			{
@@ -101,15 +98,172 @@
 		]
 	};
 
-	onMount(() => {
-		loadFinishedGoods().then(() => {
+	onMount(async () => {
+		// Load finished goods first, then check SO data and other dependencies
+		await loadFinishedGoods().then(() => {
 			checkLowStockItems();
+			// Check if there's SO data to auto-fill SJ form (after finished goods are loaded)
+			checkAndLoadSOData();
 		});
 		loadRawMaterials();
 		loadConsumableSpareparts();
 		loadCustomerOptions();
 		loadGudangList();
 	});
+	
+	// Function to check and load SO Customer data for auto-filling SJ form
+	function checkAndLoadSOData() {
+		try {
+			const soData = localStorage.getItem('so_data_for_sj');
+			if (soData) {
+				const parsedData = JSON.parse(soData);
+				console.log('=== DEBUG SO DATA LOADING ===');
+				console.log('Loading SO data for SJ:', parsedData);
+				console.log('Available finished goods:', finishedGoods.length);
+				console.log('Sample finished goods:', finishedGoods.slice(0, 3));
+				
+				// Auto-fill SJ form with SO data
+				sjFormData.kode_customer = parsedData.kode_customer || '';
+				sjFormData.nama_customer = parsedData.nama_customer || '';
+				sjFormData.kode_sales = parsedData.kode_sales || '';
+				sjFormData.nomor_po_customer = parsedData.nomor_po_customer || '';
+				
+				// Auto-fill items with finished goods from SO
+				if (parsedData.items && parsedData.items.length > 0) {
+					console.log('=== DEBUG ITEMS PROCESSING ===');
+					console.log('SO items to process:', parsedData.items);
+					
+					sjFormData.items = parsedData.items.map((item, index) => {
+						console.log(`\n--- Processing item ${index + 1} ---`);
+						console.log('SO item data:', item);
+						
+						// Find matching finished good by kode_barang first, then by nama_barang
+						let matchingFinishedGood = null;
+						
+						// Try matching by kode_barang
+						if (item.kode_barang) {
+							matchingFinishedGood = finishedGoods.find(fg => 
+								fg.kode_barang && fg.kode_barang.toLowerCase() === item.kode_barang.toLowerCase()
+							);
+							console.log(`Searching by kode_barang: "${item.kode_barang}" -> Found:`, matchingFinishedGood ? 'YES' : 'NO');
+						}
+						
+						// If not found by kode_barang, try by nama_barang
+						if (!matchingFinishedGood && item.nama_barang) {
+							matchingFinishedGood = finishedGoods.find(fg => 
+								fg.nama_barang && fg.nama_barang.toLowerCase().includes(item.nama_barang.toLowerCase())
+							);
+							console.log(`Searching by nama_barang: "${item.nama_barang}" -> Found:`, matchingFinishedGood ? 'YES' : 'NO');
+						}
+						
+						// If still not found, try partial matching
+						if (!matchingFinishedGood && item.nama_barang) {
+							matchingFinishedGood = finishedGoods.find(fg => 
+								fg.nama_barang && item.nama_barang.toLowerCase().includes(fg.nama_barang.toLowerCase())
+							);
+							console.log(`Partial matching by nama_barang: "${item.nama_barang}" -> Found:`, matchingFinishedGood ? 'YES' : 'NO');
+						}
+						
+						if (matchingFinishedGood) {
+							console.log('✅ Matched finished good:', {
+								id: matchingFinishedGood.id,
+								kode_barang: matchingFinishedGood.kode_barang,
+								nama_barang: matchingFinishedGood.nama_barang
+							});
+						} else {
+							console.log('❌ No matching finished good found');
+							// Log available options for debugging
+							console.log('Available finished goods kode_barang:', finishedGoods.map(fg => fg.kode_barang).slice(0, 10));
+							console.log('Available finished goods nama_barang:', finishedGoods.map(fg => fg.nama_barang).slice(0, 10));
+						}
+						
+						const resultItem = {
+							finish_good_id: matchingFinishedGood ? matchingFinishedGood.id.toString() : '',
+							finish_good_name: item.nama_barang || '',
+							raw_material_id: '',
+							raw_material_name: '',
+							consumable_sparepart_id: '',
+							consumable_sparepart_name: '',
+							item_type: 'finished_good', // Default to finished good
+							warna: item.warna || matchingFinishedGood?.warna || '',
+							kemasan: item.kemasan || matchingFinishedGood?.kemasan || '',
+							satuan: item.satuan || matchingFinishedGood?.satuan || 'pcs',
+							quantity: item.qty || 1
+						};
+						
+						console.log('Final item result:', resultItem);
+						return resultItem;
+					});
+					
+					console.log('=== FINAL SJ ITEMS ===');
+					console.log('Final SJ items:', sjFormData.items);
+				}
+				
+				// Generate SJ number
+				generateNomorSJ().then(nomor => {
+					sjFormData.nomor_sj = nomor;
+				});
+				
+				// Open SJ form immediately
+				showSJForm = true;
+				
+				// Force reactive update with a small delay
+				setTimeout(() => {
+					console.log('=== FORCING REACTIVE UPDATE ===');
+					console.log('sjFormData after update:', sjFormData);
+					// Trigger reactive update and force dropdown update
+					forceUpdateDropdowns();
+				}, 100);
+				
+				// Clear the localStorage data after using it
+				localStorage.removeItem('so_data_for_sj');
+				
+				showToast('Data SO Customer berhasil dimuat untuk pembuatan Surat Jalan', 'success');
+			} else {
+				console.log('No SO data found in localStorage');
+			}
+		} catch (error) {
+			console.error('Error loading SO data:', error);
+		}
+	}
+	
+	// Helper function to show toast notifications
+	function showToast(message, type = 'success') {
+		toast = { show: true, message, type, html: false };
+		setTimeout(() => (toast.show = false), 3000);
+	}
+	
+	// Test function to simulate SO data
+	function testSOData() {
+		// Create sample SO data for testing
+		const testData = {
+			kode_customer: 'CUST1082',
+			nama_customer: 'ABI MAULANA, Bapak',
+			kode_sales: 'S003',
+			nomor_po_customer: '123456',
+			items: [
+				{
+					kode_barang: finishedGoods.length > 0 ? finishedGoods[0].kode_barang : 'TEST001',
+					nama_barang: finishedGoods.length > 0 ? finishedGoods[0].nama_barang : 'Test Product 1',
+					qty: 20,
+					satuan: 'KG',
+					warna: 'Warna',
+					kemasan: 'KALENG'
+				}
+			]
+		};
+		
+		console.log('Creating test SO data:', testData);
+		localStorage.setItem('so_data_for_sj', JSON.stringify(testData));
+		checkAndLoadSOData();
+	}
+	
+	// Force update dropdown values
+	function forceUpdateDropdowns() {
+		console.log('=== FORCING DROPDOWN UPDATE ===');
+		sjFormData.items = sjFormData.items.map(item => ({ ...item }));
+		sjFormData = { ...sjFormData };
+	}
 
 	async function loadFinishedGoods() {
 		loading = true;
@@ -368,10 +522,13 @@
 		filteredFinishedGoods = finishedGoods.filter((item) => {
 			const matchesSearch =
 				searchTerm === '' ||
-				item.nama_barang.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.kode_barang.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.nama_produk.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.warna.toLowerCase().includes(searchTerm.toLowerCase());
+				(item.nama_barang && item.nama_barang.toLowerCase().includes(searchTerm.toLowerCase())) ||
+				(item.kode_barang && item.kode_barang.toLowerCase().includes(searchTerm.toLowerCase())) ||
+				(item.nama_produk && item.nama_produk.toLowerCase().includes(searchTerm.toLowerCase())) ||
+				(item.warna && item.warna.toLowerCase().includes(searchTerm.toLowerCase())) ||
+				(item.kemasan && item.kemasan.toLowerCase().includes(searchTerm.toLowerCase())) ||
+				(item.nama_produk_group && item.nama_produk_group.toLowerCase().includes(searchTerm.toLowerCase())) ||
+				(item.nama_formula && item.nama_formula.toLowerCase().includes(searchTerm.toLowerCase()));
 
 			const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
 
@@ -596,15 +753,9 @@
 		}
 	}
 
-	// Reactive statements
+	// Reactive statements - gabung menjadi satu untuk efisiensi
 	$: {
-		if (searchTerm !== undefined || statusFilter !== undefined) {
-			handleSearch();
-		}
-	}
-
-	$: {
-		if (searchTerm !== undefined || statusFilter !== undefined || gudangFilter !== undefined) {
+		if (finishedGoods.length > 0 && (searchTerm !== undefined || statusFilter !== undefined || gudangFilter !== undefined)) {
 			handleSearch();
 		}
 	}
@@ -892,9 +1043,11 @@
 
 	// Function to handle finish good selection
 	function handleFinishGoodSelect(index, finishGoodId) {
-		const selectedFinishGood = finishedGoods.find((item) => item.id === finishGoodId);
+		console.log('handleFinishGoodSelect called:', { index, finishGoodId });
+		const selectedFinishGood = finishedGoods.find((item) => item.id.toString() === finishGoodId.toString());
 		if (selectedFinishGood) {
-			sjFormData.items[index].finish_good_id = selectedFinishGood.id;
+			console.log('Selected finish good:', selectedFinishGood);
+			sjFormData.items[index].finish_good_id = selectedFinishGood.id.toString();
 			sjFormData.items[index].finish_good_name = selectedFinishGood.nama_barang;
 			sjFormData.items[index].warna = selectedFinishGood.warna || '';
 			sjFormData.items[index].kemasan = selectedFinishGood.kemasan || '';
@@ -908,6 +1061,8 @@
 				};
 				setTimeout(() => (toast.show = false), 5000);
 			}
+		} else {
+			console.log('No finish good found with ID:', finishGoodId);
 		}
 		calculateItemTotal(index);
 	}
@@ -1062,12 +1217,9 @@
 					tgl_po: sjFormData.tanggal_po_customer,
 					nomor_sj: sjFormData.nomor_sj,
 					tgl_sj: sjFormData.tanggal_sj,
-					no_pajak: sjFormData.nomor_pajak,
-					tgl_pajak: sjFormData.tanggal_pajak,
 					tgl_invoice: sjFormData.tanggal_invoice,
 					nama_sopir: sjFormData.nama_sopir,
 					no_kendaraan: sjFormData.no_kendaraan,
-					term: sjFormData.term.toString(),
 					due_date: sjFormData.due_date,
 					ppn_enabled: sjFormData.ppn_enable,
 					ppn_included: sjFormData.include_ppn,
@@ -1220,45 +1372,50 @@
 		}
 	}
 
-	// Update due date when term changes
+	// Update due date when invoice date changes (using default 30 days term)
 	function updateDueDate() {
 		const invoiceDate = new Date(sjFormData.tanggal_invoice);
-		sjFormData.due_date = new Date(invoiceDate.setDate(invoiceDate.getDate() + sjFormData.term))
+		sjFormData.due_date = new Date(invoiceDate.setDate(invoiceDate.getDate() + 30))
 			.toISOString()
 			.split('T')[0];
 	}
 
 	async function openSJForm() {
-		// Reset form data
-		sjFormData = {
-			kode_customer: '',
-			nama_customer: '', // Reset nama customer
-			kode_sales: '',
-			nomor_po_customer: '',
-			tanggal_po_customer: new Date().toISOString().split('T')[0],
-			nomor_sj: await generateNomorSJ(), // Auto-generate nomor SJ
-			tanggal_sj: new Date().toISOString().split('T')[0],
-			nomor_pajak: '',
-			tanggal_pajak: new Date().toISOString().split('T')[0],
-			tanggal_invoice: new Date().toISOString().split('T')[0],
-			nama_sopir: '',
-			no_kendaraan: '',
-			term: 30, // Default 30 days
-			due_date: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
-			items: [
-				{
-					finish_good_id: '',
-					finish_good_name: '',
-					raw_material_id: '',
-					raw_material_name: '',
-					warna: '',
-					kemasan: '',
-					satuan: '',
-					quantity: 1
-					// Harga, diskon, dan total_harga dihapus
-				}
-			]
-		};
+		// Check if there's existing data from SO (don't reset if already filled)
+		if (!sjFormData.kode_customer) {
+			// Reset form data only if no existing data
+			sjFormData = {
+				kode_customer: '',
+				nama_customer: '', // Reset nama customer
+				kode_sales: '',
+				nomor_po_customer: '',
+				tanggal_po_customer: new Date().toISOString().split('T')[0],
+				nomor_sj: await generateNomorSJ(), // Auto-generate nomor SJ
+				tanggal_sj: new Date().toISOString().split('T')[0],
+				tanggal_invoice: new Date().toISOString().split('T')[0],
+				nama_sopir: '',
+				no_kendaraan: '',
+				due_date: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
+				items: [
+					{
+						finish_good_id: '',
+						finish_good_name: '',
+						raw_material_id: '',
+						raw_material_name: '',
+						warna: '',
+						kemasan: '',
+						satuan: '',
+						quantity: 1
+						// Harga, diskon, dan total_harga dihapus
+					}
+				]
+			};
+		} else {
+			// If data exists (from SO), just ensure we have a valid SJ number
+			if (!sjFormData.nomor_sj) {
+				sjFormData.nomor_sj = await generateNomorSJ();
+			}
+		}
 
 		// Reset customer PO list
 		customerPOList = [];
@@ -1858,6 +2015,13 @@
 				on:click={openSJForm}
 			>
 				Buat SJ
+			</button>
+
+			<button
+				class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+				on:click={testSOData}
+			>
+				Test SO Data
 			</button>
 
 			<button
@@ -2505,31 +2669,7 @@
 								/>
 							</div>
 
-							<!-- Tax Info -->
-							<div>
-								<label for="nomor_pajak" class="block text-sm font-medium text-gray-700 mb-1"
-									>Nomor Pajak</label
-								>
-								<input
-									id="nomor_pajak"
-									type="text"
-									bind:value={sjFormData.nomor_pajak}
-									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-									placeholder="Masukkan nomor pajak"
-								/>
-							</div>
-
-							<div>
-								<label for="tanggal_pajak" class="block text-sm font-medium text-gray-700 mb-1"
-									>Tanggal Pajak</label
-								>
-								<input
-									id="tanggal_pajak"
-									type="date"
-									bind:value={sjFormData.tanggal_pajak}
-									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-								/>
-							</div>
+							<!-- Tax Info removed as requested -->
 
 							<div>
 								<label for="tanggal_invoice" class="block text-sm font-medium text-gray-700 mb-1"
@@ -2572,21 +2712,7 @@
 								/>
 							</div>
 
-							<!-- Payment Terms -->
-							<div>
-								<label for="term" class="block text-sm font-medium text-gray-700 mb-1"
-									>Term (hari)</label
-								>
-								<input
-									id="term"
-									type="number"
-									bind:value={sjFormData.term}
-									min="0"
-									on:change={updateDueDate}
-									class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-									placeholder="30"
-								/>
-							</div>
+							<!-- Payment Terms removed as requested -->
 
 							<div>
 								<label for="due_date" class="block text-sm font-medium text-gray-700 mb-1"
@@ -2680,27 +2806,43 @@
 
 												<!-- Finish Good -->
 												<td class="px-3 py-2">
-													<select
-														bind:value={item.finish_good_id}
-														on:change={() => handleFinishGoodSelect(index, item.finish_good_id)}
-														disabled={item.item_type !== 'finished_good'}
-														class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !==
-														'finished_good'
-															? 'bg-gray-100'
-															: ''}"
-													>
-														<option value="">
-															{item.item_type === 'finished_good' ? 'Pilih Finish Good' : '-'}
-														</option>
-														{#if item.item_type === 'finished_good'}
-															{#each finishedGoods as fg}
-																<option value={fg.id} disabled={fg.sisa_stok < item.quantity}>
-																	{fg.nama_barang}
-																	{fg.sisa_stok < item.quantity ? '(Stok tidak cukup)' : ''}
-																</option>
-															{/each}
-														{/if}
-													</select>
+													{#key `${index}-${item.finish_good_id}-${item.item_type}`}
+														<select
+															bind:value={item.finish_good_id}
+															on:change={() => handleFinishGoodSelect(index, item.finish_good_id)}
+															disabled={item.item_type !== 'finished_good'}
+															class="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm {item.item_type !==
+															'finished_good'
+																? 'bg-gray-100'
+																: ''}"
+														>
+															<option value="">
+																{item.item_type === 'finished_good' ? 'Pilih Finish Good' : '-'}
+															</option>
+															{#if item.item_type === 'finished_good'}
+																{#each finishedGoods as fg}
+																	<option value={fg.id.toString()} 
+																		disabled={fg.sisa_stok < item.quantity}
+																	>
+																		{fg.kode_barang} - {fg.nama_barang}
+																		{fg.sisa_stok < item.quantity ? ' (Stok tidak cukup)' : ` (Stok: ${fg.sisa_stok})`}
+																	</option>
+																{/each}
+															{/if}
+														</select>
+													{/key}
+													<!-- Debug info -->
+													{#if item.item_type === 'finished_good'}
+														<div class="text-xs text-gray-500 mt-1">
+															Selected ID: {item.finish_good_id}
+															{#if item.finish_good_id}
+																{@const selectedFG = finishedGoods.find(fg => fg.id.toString() === item.finish_good_id.toString())}
+																{#if selectedFG}
+																	<br>Selected: {selectedFG.kode_barang} - {selectedFG.nama_barang}
+																{/if}
+															{/if}
+														</div>
+													{/if}
 												</td>
 
 												<!-- Raw Material -->
@@ -2892,8 +3034,9 @@
 					id="search-input"
 					type="text"
 					bind:value={searchTerm}
-					placeholder="Cari nama, kode barang..."
+					placeholder="Cari nama barang, kode, produk, warna, kemasan..."
 					class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+					on:input={() => handleSearch()}
 				/>
 			</div>
 			<div>

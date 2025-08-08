@@ -1,11 +1,13 @@
 <script>
 	import { onMount } from 'svelte';
 	import StatusBadge from '$lib/components/common/StatusBadge.svelte';
-	import { getAllRawMaterials, createRawMaterial } from '$lib/services/rawmaterial.js';
+	import { getAllRawMaterials, getAllRawMaterialsSimple, createRawMaterial, testDirectusConnection } from '$lib/services/rawmaterial.js';
 
 	let loading = false;
 	let error = null;
 	let toast = { show: false, message: '', type: 'success' };
+	let connectionStatus = null;
+	let dataLoadInfo = null;
 	
 	// State untuk data raw materials
 	let rawMaterials = [];
@@ -52,14 +54,52 @@
 	const satuanOptions = ['Kg', 'Ltr', 'Pcs', 'Box', 'Bag', 'Drum'];
 
 	onMount(() => {
+		testConnection();
 		loadRawMaterials();
 	});
+
+	async function testConnection() {
+		try {
+			console.log('Testing Directus connection...');
+			connectionStatus = await testDirectusConnection();
+			console.log('Connection status:', connectionStatus);
+			
+			if (!connectionStatus.authenticationWorking) {
+				toast = { 
+					show: true, 
+					message: `Connection issue: ${connectionStatus.message}`, 
+					type: 'error' 
+				};
+				setTimeout(() => toast.show = false, 5000);
+			}
+		} catch (err) {
+			console.error('Connection test failed:', err);
+			connectionStatus = { 
+				serverConnected: false, 
+				authenticationWorking: false, 
+				message: err.message 
+			};
+		}
+	}
 
 	async function loadRawMaterials() {
 		loading = true;
 		try {
 			console.log('Loading raw materials...');
+			const startTime = Date.now();
 			const data = await getAllRawMaterials();
+			const loadTime = Date.now() - startTime;
+			
+			console.log('Raw materials loaded:', data);
+			console.log('Data length:', data.length);
+			console.log('Load time:', loadTime + 'ms');
+			
+			dataLoadInfo = {
+				count: data.length,
+				loadTime: loadTime,
+				method: 'getAllRawMaterials',
+				timestamp: new Date().toLocaleTimeString()
+			};
 			
 			rawMaterials = data.map(item => ({
 				...item,
@@ -70,12 +110,74 @@
 			totalItems = rawMaterials.length;
 			updatePaginatedItems();
 			
-			console.log('Raw materials loaded:', rawMaterials.length);
+			console.log('Processed raw materials:', rawMaterials.length);
+			
+			if (rawMaterials.length === 0) {
+				toast = { 
+					show: true, 
+					message: 'No raw materials found. Check your Directus collection and permissions.', 
+					type: 'warning' 
+				};
+				setTimeout(() => toast.show = false, 5000);
+			} else {
+				toast = { 
+					show: true, 
+					message: `Successfully loaded ${rawMaterials.length} raw materials`, 
+					type: 'success' 
+				};
+				setTimeout(() => toast.show = false, 3000);
+			}
 		} catch (err) {
 			error = err.message;
 			console.error('Load Raw Materials Error:', err);
 			toast = { show: true, message: 'Error loading data: ' + err.message, type: 'error' };
+			setTimeout(() => toast.show = false, 5000);
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function loadRawMaterialsSimple() {
+		loading = true;
+		try {
+			console.log('Loading raw materials (simple method)...');
+			const startTime = Date.now();
+			const data = await getAllRawMaterialsSimple();
+			const loadTime = Date.now() - startTime;
+			
+			console.log('Raw materials loaded (simple):', data);
+			console.log('Data length:', data.length);
+			console.log('Load time:', loadTime + 'ms');
+			
+			dataLoadInfo = {
+				count: data.length,
+				loadTime: loadTime,
+				method: 'getAllRawMaterialsSimple',
+				timestamp: new Date().toLocaleTimeString()
+			};
+			
+			rawMaterials = data.map(item => ({
+				...item,
+				status: calculateStatus(item.sisa_stok || 0, item.minimum_stok || 0)
+			}));
+			
+			filteredRawMaterials = rawMaterials;
+			totalItems = rawMaterials.length;
+			updatePaginatedItems();
+			
+			console.log('Processed raw materials (simple):', rawMaterials.length);
+			
+			toast = { 
+				show: true, 
+				message: `Successfully loaded ${rawMaterials.length} raw materials`, 
+				type: 'success' 
+			};
 			setTimeout(() => toast.show = false, 3000);
+		} catch (err) {
+			error = err.message;
+			console.error('Load Raw Materials Simple Error:', err);
+			toast = { show: true, message: 'Error loading data (simple): ' + err.message, type: 'error' };
+			setTimeout(() => toast.show = false, 5000);
 		} finally {
 			loading = false;
 		}
@@ -190,14 +292,11 @@
 			const matchesSearch = searchTerm === '' || 
 				item.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
 				item.kode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.kemasan.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.Divisi.toLowerCase().includes(searchTerm.toLowerCase());
+				item.kemasan.toLowerCase().includes(searchTerm.toLowerCase());
 			
 			const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-			const matchesDivisi = divisiFilter === 'all' || item.Divisi === divisiFilter;
-			const matchesJenis = jenisFilter === 'all' || item.Jenis === jenisFilter;
 			
-			return matchesSearch && matchesStatus && matchesDivisi && matchesJenis;
+			return matchesSearch && matchesStatus;
 		});
 		
 		totalItems = filteredRawMaterials.length;
@@ -234,7 +333,7 @@
 
 	// Reactive statements
 	$: {
-		if (searchTerm !== undefined || statusFilter !== undefined || divisiFilter !== undefined || jenisFilter !== undefined) {
+		if (searchTerm !== undefined || statusFilter !== undefined) {
 			handleSearch();
 		}
 	}
@@ -263,18 +362,48 @@
 			</button>
 			<button
 				class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-				on:click={() => window.location.reload()}
+				on:click={loadRawMaterials}
+				disabled={loading}
 			>
-				Refresh
+				{loading ? 'Loading...' : 'Refresh'}
 			</button>
 		</div>
 	</div>
 
 	{#if toast.show}
-		<div class="fixed top-4 right-4 z-50 p-4 rounded-md shadow-lg {toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white">
+		<div class="fixed top-4 right-4 z-50 p-4 rounded-md shadow-lg {toast.type === 'success' ? 'bg-green-500' : toast.type === 'warning' ? 'bg-yellow-500' : 'bg-red-500'} text-white">
 			{toast.message}
 		</div>
 	{/if}
+
+	<!-- Connection Status Debug Info - Hidden -->
+	<!-- {#if connectionStatus}
+		<div class="bg-gray-50 border border-gray-200 rounded-md p-4 mb-6">
+			<h3 class="text-sm font-medium text-gray-900 mb-2">Connection Status (Debug Info)</h3>
+			<div class="text-xs text-gray-600 space-y-1">
+				<div>Server Connected: <span class="{connectionStatus.serverConnected ? 'text-green-600' : 'text-red-600'}">{connectionStatus.serverConnected ? 'Yes' : 'No'}</span></div>
+				<div>Authentication: <span class="{connectionStatus.authenticationWorking ? 'text-green-600' : 'text-red-600'}">{connectionStatus.authenticationWorking ? 'Working' : 'Failed'}</span></div>
+				<div>Status Code: {connectionStatus.status}</div>
+				<div>Message: {connectionStatus.message}</div>
+				{#if connectionStatus.error}
+					<div>Error: {connectionStatus.error}</div>
+				{/if}
+			</div>
+		</div>
+	{/if} -->
+
+	<!-- Data Load Info - Hidden -->
+	<!-- {#if dataLoadInfo}
+		<div class="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+			<h3 class="text-sm font-medium text-blue-900 mb-2">Data Load Information</h3>
+			<div class="text-xs text-blue-700 space-y-1">
+				<div>Records Loaded: <span class="font-semibold">{dataLoadInfo.count}</span></div>
+				<div>Load Time: <span class="font-semibold">{dataLoadInfo.loadTime}ms</span></div>
+				<div>Method Used: <span class="font-semibold">{dataLoadInfo.method}</span></div>
+				<div>Last Updated: <span class="font-semibold">{dataLoadInfo.timestamp}</span></div>
+			</div>
+		</div>
+	{/if} -->
 
 	<!-- Add Form Modal -->
 	{#if showAddForm}
@@ -293,12 +422,6 @@
 					
 					<form on:submit|preventDefault={saveRawMaterial}>
 						<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-							<!-- Debug Form Data -->
-							<div class="md:col-span-3 mb-4 p-4 bg-gray-50 rounded-md">
-								<h4 class="text-sm font-medium text-gray-700 mb-2">Debug Form Data:</h4>
-								<pre class="text-xs text-gray-600">{JSON.stringify(formData, null, 2)}</pre>
-							</div>
-							
 							<!-- Basic Information -->
 							<div class="md:col-span-3">
 								<h3 class="text-lg font-semibold text-gray-900 mb-4">Informasi Dasar</h3>
@@ -421,8 +544,6 @@
 									<option value="Active">Active</option>
 									<option value="Not Active">Not Active</option>
 								</select>
-								<!-- Debug info -->
-								<div class="text-xs text-gray-500 mt-1">Current value: {formData.kategori}</div>
 							</div>
 							
 							<!-- Pricing Information -->
@@ -573,7 +694,7 @@
 					id="search-input"
 					type="text"
 					bind:value={searchTerm}
-					placeholder="Cari berdasarkan kode, nama, kemasan, atau divisi..."
+					placeholder="Cari berdasarkan kode, nama, atau kemasan..."
 					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
 				/>
 			</div>
@@ -588,32 +709,6 @@
 					<option value="Ready">Ready</option>
 					<option value="Low Stock">Low Stock</option>
 					<option value="Out of Stock">Out of Stock</option>
-				</select>
-			</div>
-			<div class="min-w-40">
-				<label for="divisi-filter" class="block text-sm font-medium text-gray-700 mb-1">Divisi</label>
-				<select
-					id="divisi-filter"
-					bind:value={divisiFilter}
-					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-				>
-					<option value="all">Semua Divisi</option>
-					{#each divisiOptions as option}
-						<option value={option}>{option}</option>
-					{/each}
-				</select>
-			</div>
-			<div class="min-w-40">
-				<label for="jenis-filter" class="block text-sm font-medium text-gray-700 mb-1">Jenis</label>
-				<select
-					id="jenis-filter"
-					bind:value={jenisFilter}
-					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-				>
-					<option value="all">Semua Jenis</option>
-					{#each jenisOptions as option}
-						<option value={option}>{option}</option>
-					{/each}
 				</select>
 			</div>
 		</div>
@@ -665,19 +760,7 @@
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kemasan</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Satuan</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Divisi</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Group</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Satuan Stok</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kategori</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Harga Beli</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Harga Lama</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">HP Awal</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sisa Stok</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sisa PO</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stok</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">In Liter</th>
-							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">In KG</th>
 							<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
 						</tr>
 					</thead>
@@ -688,23 +771,7 @@
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.nama}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.kemasan}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.satuan}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.Divisi}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.Group}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.Jenis}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.stok}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm">
-									<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {item.kategori === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-										{item.kategori}
-									</span>
-								</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(item.harga_beli || 0)}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(item.harga_lama || 0)}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(item.hp_awal || 0)}</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.sisa_stok || 0}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.sisa_po || 0}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.minimum_stok || 0}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.in_liter || 0}</td>
-								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.in_kg || 0}</td>
 								<td class="px-4 py-4 whitespace-nowrap">
 									<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {
 										item.status === 'Ready' ? 'bg-green-100 text-green-800' :

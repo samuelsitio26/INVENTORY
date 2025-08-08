@@ -19,6 +19,7 @@
 	// Filter dan search
 	let searchTerm = '';
 	let priorityFilter = 'all';
+	let statusFilter = 'all';
 
 	onMount(() => {
 		loadProductionNotifications();
@@ -62,11 +63,11 @@
 
 				allRequests = productionRequestsData.data
 					.filter((request) => {
-						// Only show requests that are NOT done/completed
-						const isNotCompleted =
-							request.status !== 'completed' &&
-							request.status !== 'produced' &&
-							request.status !== 'done';
+						// Show all requests including approved ones for history
+						// Only hide completely deleted or cancelled requests
+						const shouldShow =
+							request.status !== 'deleted' &&
+							request.status !== 'cancelled';
 
 						console.log(
 							'Filtering request:',
@@ -74,10 +75,10 @@
 							'status:',
 							request.status,
 							'show:',
-							isNotCompleted
+							shouldShow
 						);
 
-						return isNotCompleted;
+						return shouldShow;
 					})
 					.map((request) => ({
 						...request,
@@ -176,8 +177,10 @@
 				item.warna.toLowerCase().includes(searchTerm.toLowerCase());
 
 			const matchesPriority = priorityFilter === 'all' || item.priority === priorityFilter;
+			
+			const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
 
-			return matchesSearch && matchesPriority;
+			return matchesSearch && matchesPriority && matchesStatus;
 		});
 
 		totalItems = filteredNotifications.length;
@@ -365,7 +368,7 @@
 
 	// Reactive statements
 	$: {
-		if (searchTerm !== undefined || priorityFilter !== undefined) {
+		if (searchTerm !== undefined || priorityFilter !== undefined || statusFilter !== undefined) {
 			handleSearch();
 		}
 	}
@@ -436,11 +439,29 @@
 					<option value="medium">Medium</option>
 				</select>
 			</div>
+			<div class="min-w-48">
+				<label for="status-filter" class="block text-sm font-medium text-gray-700 mb-1"
+					>Status</label
+				>
+				<select
+					id="status-filter"
+					bind:value={statusFilter}
+					class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+				>
+					<option value="all">Semua Status</option>
+					<option value="pending">Pending</option>
+					<option value="in_progress">In Progress</option>
+					<option value="done">Done</option>
+					<option value="produced">Produced</option>
+					<option value="completed">Completed</option>
+					<option value="approve">Approved</option>
+				</select>
+			</div>
 		</div>
 	</div>
 
 	<!-- Stats Cards -->
-	<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+	<div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
 		<div class="bg-white p-4 rounded-lg shadow">
 			<div class="text-sm text-gray-600">Total Items</div>
 			<div class="text-2xl font-bold text-gray-900">{productionNotifications.length}</div>
@@ -458,9 +479,21 @@
 			</div>
 		</div>
 		<div class="bg-white p-4 rounded-lg shadow">
-			<div class="text-sm text-gray-600">Medium Priority</div>
+			<div class="text-sm text-gray-600">Pending</div>
 			<div class="text-2xl font-bold text-yellow-600">
-				{productionNotifications.filter((item) => item.priority === 'medium').length}
+				{productionNotifications.filter((item) => item.status === 'pending' || !item.status).length}
+			</div>
+		</div>
+		<div class="bg-white p-4 rounded-lg shadow">
+			<div class="text-sm text-gray-600">Approved</div>
+			<div class="text-2xl font-bold text-green-600">
+				{productionNotifications.filter((item) => item.status === 'approve' || item.status === 'done' || item.status === 'completed').length}
+			</div>
+		</div>
+		<div class="bg-white p-4 rounded-lg shadow">
+			<div class="text-sm text-gray-600">Produced</div>
+			<div class="text-2xl font-bold text-purple-600">
+				{productionNotifications.filter((item) => item.status === 'produced').length}
 			</div>
 		</div>
 	</div>
@@ -542,11 +575,13 @@
 					<tbody class="bg-white divide-y divide-gray-200">
 						{#each paginatedItems as item}
 							<tr
-								class="hover:bg-gray-50 {item.priority === 'urgent'
-									? 'bg-red-50'
-									: item.priority === 'high'
-										? 'bg-orange-50'
-										: 'bg-yellow-50'} ring-2 ring-purple-300"
+								class="hover:bg-gray-50 {item.status === 'approve' || item.status === 'done' || item.status === 'completed' || item.status === 'produced'
+									? 'bg-gray-100 opacity-70'
+									: item.priority === 'urgent'
+										? 'bg-red-50'
+										: item.priority === 'high'
+											? 'bg-orange-50'
+											: 'bg-yellow-50'} ring-2 ring-purple-300"
 							>
 								<td class="px-4 py-4 whitespace-nowrap">
 									<span
@@ -606,9 +641,13 @@
 								</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
 									<span
-										class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
+										class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {item.status === 'approve' || item.status === 'done' || item.status === 'completed' || item.status === 'produced'
+											? 'bg-gray-100 text-gray-800'
+											: 'bg-purple-100 text-purple-800'}"
 									>
-										🚨 Requested
+										{item.status === 'approve' || item.status === 'done' || item.status === 'completed' || item.status === 'produced'
+											? '📜 History'
+											: '🚨 Active'}
 									</span>
 								</td>
 								<td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900"
@@ -616,18 +655,22 @@
 								>
 								<td class="px-4 py-4 whitespace-nowrap">
 									<div class="flex gap-2">
-										<button
-											class="px-3 py-1 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 text-sm"
-											on:click={() => markAsProduced(item)}
-										>
-											Tandai Diproduksi
-										</button>
-										<button
-											class="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 text-sm"
-											on:click={() => confirmDelete(item)}
-										>
-											Hapus
-										</button>
+										{#if item.status !== 'approve' && item.status !== 'done' && item.status !== 'completed' && item.status !== 'produced'}
+											<button
+												class="px-3 py-1 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 text-sm"
+												on:click={() => markAsProduced(item)}
+											>
+												Tandai Diproduksi
+											</button>
+											<button
+												class="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 text-sm"
+												on:click={() => confirmDelete(item)}
+											>
+												Hapus
+											</button>
+										{:else}
+											<span class="text-gray-500 text-sm italic">History - No Action</span>
+										{/if}
 									</div>
 								</td>
 							</tr>
