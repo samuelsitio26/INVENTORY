@@ -696,8 +696,8 @@
 				class="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-purple-600/20 to-indigo-600/20 animate-pulse duration-[3000ms]"
 			></div>
 
-			<div class="relative max-w-6xl mx-auto px-1 sm:px-1 lg:px-2">
-				<div class="flex justify-between items-center h-24">
+			<div class="relative max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+				<div class="flex justify-between items-center h-20">
 					<div class="flex items-center space-x-6">
 						<!-- Logo/Icon with Glow Effect -->
 						<div class="relative group">
@@ -857,8 +857,8 @@
 				style="background-image: url('data:image/svg+xml;utf8,<svg width=&quot;40&quot; height=&quot;40&quot; viewBox=&quot;0 0 40 40&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><g fill=&quot;%23f3f4f6&quot; fill-opacity=&quot;0.4&quot;><path d=&quot;M20 20c0 11.046-8.954 20-20 20v20h40V20H20z&quot;/></g></svg>')"
 			></div>
 
-			<div class="relative max-w-6xl mx-auto px-1 sm:px-1 lg:px-2">
-				<div class="flex items-center justify-between h-16">
+			<div class="relative max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+				<div class="flex items-center justify-between h-14">
 					<!-- Navigation Items -->
 					<div class="flex items-center space-x-1">
 						{#each menuItems as item, index}
@@ -930,7 +930,7 @@
 		</nav>
 
 		<!-- Main Content -->
-		<main class="max-w-6xl mx-auto px-1 sm:px-1 lg:px-2 py-8">
+		<main class="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-4">
 			<slot />
 		</main>
 	</div>
