@@ -10,6 +10,7 @@
     import { searchTerm } from '$lib/stores/search.js';
 
     let loading = false;
+    let stockOperationLoading = false;
     let error = null;
     let toast = { show: false, message: '', type: 'success' };
     let confirmDialog = { show: false, message: '', id: null, name: '', type: 'received' };
@@ -41,6 +42,63 @@
     let currentStockPage = 1;
     const stockItemsPerPage = 20;
     let paginatedStockedItems = [];
+
+    // Debug function to check API structure  
+    async function debugAPIStructure() {
+        try {
+            // Check what fields are available in Barang collection
+            const response = await fetch('https://directus.eltamaprimaindo.com/items/Barang?limit=1', {
+                headers: {
+                    Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Sample Barang item structure:', data.data[0]);
+            }
+
+            // Check categories structure  
+            const parentCatResponse = await fetch('https://directus.eltamaprimaindo.com/items/parent_category?limit=3', {
+                headers: {
+                    Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+                }
+            });
+            
+            if (parentCatResponse.ok) {
+                const parentData = await parentCatResponse.json();
+                console.log('Sample parent category structure:', parentData.data);
+            }
+
+            const subCatResponse = await fetch('https://directus.eltamaprimaindo.com/items/sub_category?limit=3', {
+                headers: {
+                    Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+                }
+            });
+            
+            if (subCatResponse.ok) {
+                const subData = await subCatResponse.json();
+                console.log('Sample sub category structure:', subData.data);
+            }
+        } catch (error) {
+            console.error('Debug API error:', error);
+        }
+    }
+
+    // Function to format tanggal
+    function formatDate(dateString) {
+        if (!dateString) return 'Tidak ada tanggal';
+        
+        const date = new Date(dateString);
+        const options = { 
+            year: 'numeric', 
+            month: 'short', 
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        };
+        return date.toLocaleDateString('id-ID', options);
+    }
 
     // Fungsi untuk menghitung status berdasarkan stok dan threshold
     function calculateStatus(
@@ -88,27 +146,37 @@
     async function loadData() {
         loading = true;
         try {
-            // Ambil data dari koleksi pengajuan untuk nama pengaju dan status
+            // Ambil data dari koleksi pengajuan untuk nama pengaju, status, dan tanggal
             const pengajuanResponse = await fetch(
-                'https://directus.eltamaprimaindo.com/items/pengajuan?fields=id,nama_pengaju,status&limit=-1',
+                'https://directus.eltamaprimaindo.com/items/pengajuan?fields=*&limit=-1',
                 {
                     headers: {
                         Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
                     }
                 }
             );
-            if (!pengajuanResponse.ok) throw new Error('Gagal mengambil data pengajuan dari Directus');
+            
+            if (!pengajuanResponse.ok) {
+                const errorText = await pengajuanResponse.text();
+                console.error('Pengajuan API Error:', pengajuanResponse.status, errorText);
+                throw new Error(`Gagal mengambil data pengajuan dari Directus: ${pengajuanResponse.status} - ${errorText}`);
+            }
 
-            // Ambil data dari koleksi items_pengajuan untuk nama barang
+            // Ambil data dari koleksi items_pengajuan untuk nama barang dengan quantity
             const itemsPengajuanResponse = await fetch(
-                'https://directus.eltamaprimaindo.com/items/items_pengajuan?fields=id,nama_barang,request_id&limit=-1',
+                'https://directus.eltamaprimaindo.com/items/items_pengajuan?fields=*&limit=-1',
                 {
                     headers: {
                         Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
                     }
                 }
             );
-            if (!itemsPengajuanResponse.ok) throw new Error('Gagal mengambil data items pengajuan dari Directus');
+            
+            if (!itemsPengajuanResponse.ok) {
+                const errorText = await itemsPengajuanResponse.text();
+                console.error('Items Pengajuan API Error:', itemsPengajuanResponse.status, errorText);
+                throw new Error(`Gagal mengambil data items pengajuan dari Directus: ${itemsPengajuanResponse.status} - ${errorText}`);
+            }
 
             // Ambil data dari koleksi Barang (barang di stok)
             const barangResponse = await fetch(
@@ -162,11 +230,21 @@
 
             console.log('Pengajuan Data:', pengajuanData.data); // Debug API response
             console.log('Items Pengajuan Data:', itemsPengajuanData.data); // Debug API response
+            
+            // Log first item to see available fields
+            if (pengajuanData.data && pengajuanData.data.length > 0) {
+                console.log('Sample pengajuan item:', pengajuanData.data[0]);
+            }
+            if (itemsPengajuanData.data && itemsPengajuanData.data.length > 0) {
+                console.log('Sample items_pengajuan item:', itemsPengajuanData.data[0]);
+            }
 
             // Filter hanya pengajuan dengan status "Barang Diterima"
             const filteredPengajuan = pengajuanData.data.filter(
                 pengajuan => pengajuan.status === 'Barang Diterima'
             );
+
+            console.log('Filtered Pengajuan (Barang Diterima):', filteredPengajuan);
 
             // Gabungkan data pengajuan dengan items_pengajuan berdasarkan request_id
             barangDiterimaItems = itemsPengajuanData.data
@@ -183,7 +261,14 @@
                             nama_barang: item.nama_barang,
                             nama_pengaju: matchedPengajuan.nama_pengaju,
                             status: matchedPengajuan.status,
-                            request_id: item.request_id
+                            request_id: item.request_id,
+                            procurement_id: matchedPengajuan.id,
+                            date_created: matchedPengajuan.date_created || matchedPengajuan.tanggal_dibuat || matchedPengajuan.created_at,
+                            urgency: matchedPengajuan.urgency || matchedPengajuan.urgensi || 'Normal',
+                            metode_pembayaran: matchedPengajuan.metode_pembayaran || matchedPengajuan.payment_method || 'Transfer',
+                            tujuan_pengajuan: matchedPengajuan.tujuan_pengajuan || matchedPengajuan.purpose || 'Operasional',
+                            quantity: item.quantity || item.qty || item.jumlah || 1,
+                            unit: item.unit || item.satuan || 'Pcs'
                         };
                     }
                     return null;
@@ -269,10 +354,229 @@
     }
 
     function changePage(page) {
-        if (page < 1 || page > Math.ceil(totalItems / itemsPerPage)) return;
+        const itemsPerGroup = 5;
+        if (page < 1 || page > Math.ceil(procurementGroups.length / itemsPerGroup)) return;
         currentPage = page;
-        // Update dengan filtered items untuk paginasi yang benar
-        updatePaginatedItems(filteredReceivedItems);
+    }
+
+    // Function to check if item exists in stock and handle add/update
+    async function handleDirectAddToStock(item) {
+        if (stockOperationLoading) return; // Prevent multiple clicks
+        
+        stockOperationLoading = true;
+        try {
+            console.log('Processing item for stock:', item);
+            
+            // Check if categories are loaded
+            if (!parentCategories.length || !subCategories.length) {
+                throw new Error('Kategori belum dimuat. Silakan refresh halaman.');
+            }
+
+            // First, check if item already exists in stock by name
+            const existingItemResponse = await fetch(
+                `https://directus.eltamaprimaindo.com/items/Barang?filter[Nama][_eq]=${encodeURIComponent(item.nama_barang)}`,
+                {
+                    headers: {
+                        Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz'
+                    }
+                }
+            );
+
+            if (!existingItemResponse.ok) {
+                throw new Error('Gagal mengecek item yang sudah ada');
+            }
+
+            const existingData = await existingItemResponse.json();
+            const existingItems = existingData.data || [];
+
+            if (existingItems.length > 0) {
+                // Item exists, update stock
+                const existingItem = existingItems[0];
+                const newStockIn = (existingItem.StokIn || 0) + (item.quantity || 1);
+
+                console.log(`Updating existing item: ${existingItem.Nama} from ${existingItem.StokIn} to ${newStockIn}`);
+
+                // Calculate new status
+                const calculatedStatus = calculateStatus(
+                    newStockIn,
+                    existingItem.useCustomThresholds || false,
+                    existingItem.readyThreshold || 5,
+                    existingItem.lowStockThreshold || 1
+                );
+
+                const updatePayload = {
+                    StokIn: newStockIn,
+                    Status: calculatedStatus
+                };
+
+                console.log('Update payload:', updatePayload);
+
+                const updateResponse = await fetch(
+                    `https://directus.eltamaprimaindo.com/items/Barang/${existingItem.id}`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(updatePayload)
+                    }
+                );
+
+                if (!updateResponse.ok) {
+                    const errorText = await updateResponse.text();
+                    console.error('Update API Error Response:', errorText);
+                    throw new Error(`Gagal mengupdate stok: ${errorText}`);
+                }
+
+                // Update local stockedItems
+                stockedItems = stockedItems.map((stockItem) =>
+                    stockItem.id === existingItem.id
+                        ? {
+                              ...stockItem,
+                              stockIn: newStockIn,
+                              status: calculatedStatus
+                          }
+                        : stockItem
+                );
+
+                toast = { 
+                    show: true, 
+                    message: `Stok berhasil ditambah! ${item.nama_barang} sekarang: ${newStockIn}`, 
+                    type: 'success' 
+                };
+            } else {
+                // Item doesn't exist, create new
+                await createNewStockItem(item);
+            }
+
+            // Mark item as processed
+            addedToStockIds = [...addedToStockIds, item.id];
+
+            // Update stats
+            updateStockStats();
+
+            setTimeout(() => {
+                toast.show = false;
+            }, 3000);
+
+        } catch (err) {
+            toast = { show: true, message: 'Error: ' + err.message, type: 'error' };
+            setTimeout(() => {
+                toast.show = false;
+            }, 3000);
+            console.error('Error handling stock:', err);
+        } finally {
+            stockOperationLoading = false;
+        }
+    }
+
+    // Function to create new stock item
+    async function createNewStockItem(item) {
+        console.log('Creating new stock item:', item);
+        console.log('Available parent categories:', parentCategories);
+        console.log('Available sub categories:', subCategories);
+        
+        // Auto-match identitas barang for categories
+        const matchedIdentitas = autoMatchIdentitasBarang(item.nama_barang);
+        console.log('Matched identitas:', matchedIdentitas);
+        
+        // Use first available category if no match or invalid IDs
+        let parentCatId = null;
+        let subCatId = null;
+
+        if (matchedIdentitas && matchedIdentitas.parent_category && matchedIdentitas.sub_category) {
+            // Verify the IDs exist in our loaded categories
+            const parentExists = parentCategories.find(cat => cat.id === matchedIdentitas.parent_category);
+            const subExists = subCategories.find(cat => cat.id === matchedIdentitas.sub_category);
+            
+            if (parentExists && subExists) {
+                parentCatId = matchedIdentitas.parent_category;
+                subCatId = matchedIdentitas.sub_category;
+            }
+        }
+        
+        // Fallback to first available categories if no valid match
+        if (!parentCatId || !subCatId) {
+            parentCatId = parentCategories.length > 0 ? parentCategories[0].id : null;
+            subCatId = subCategories.length > 0 ? subCategories[0].id : null;
+        }
+
+        console.log('Using parent category ID:', parentCatId);
+        console.log('Using sub category ID:', subCatId);
+
+        // If we still don't have valid categories, throw an error
+        if (!parentCatId || !subCatId) {
+            throw new Error('Tidak dapat menemukan kategori yang valid. Pastikan data kategori tersedia.');
+        }
+
+        const calculatedStatus = calculateStatus(item.quantity || 1);
+
+        const payload = {
+            Nama: item.nama_barang || '-',
+            Deskripsi: `Barang dari pengajuan: ${item.nama_pengaju}`,
+            StokIn: item.quantity || 1,
+            Status: calculatedStatus
+        };
+
+        // Only add category fields if we have valid IDs
+        if (parentCatId && subCatId) {
+            payload.parent_category = parentCatId;
+            payload.sub_category = subCatId;
+        }
+
+        console.log('Payload to be sent:', payload);
+
+        const response = await fetch('https://directus.eltamaprimaindo.com/items/Barang', {
+            method: 'POST',
+            headers: {
+                Authorization: 'Bearer JaXaSE93k24zq7T2-vZyu3lgNOUgP8fz',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('API Error Response:', errorText);
+            throw new Error(`Gagal menyimpan ke stok: ${errorText}`);
+        }
+
+        const newItem = await response.json();
+        console.log('New item created:', newItem);
+        
+        // Add to local stockedItems
+        const newStockItem = {
+            id: newItem.data.id,
+            name: payload.Nama,
+            description: payload.Deskripsi,
+            stockIn: payload.StokIn,
+            status: payload.Status,
+            parent_category: parentCategories.find((cat) => cat.id === parentCatId)?.parent_category || 'Unknown',
+            sub_category: subCategories.find((cat) => cat.id === subCatId)?.nama_sub || 'Unknown'
+        };
+
+        stockedItems = [newStockItem, ...stockedItems];
+
+        toast = { 
+            show: true, 
+            message: `Barang baru berhasil ditambahkan ke stok: ${item.nama_barang}`, 
+            type: 'success' 
+        };
+    }
+
+    // Function to update stock statistics
+    function updateStockStats() {
+        const readyItems = stockedItems.filter((item) => item.status === 'Ready').length;
+        const lowStockItems = stockedItems.filter((item) => item.status === 'Low Stock').length;
+        const outOfStockItems = stockedItems.filter((item) => item.status === 'Out of Stock').length;
+
+        stockStats.set({
+            totalItems: stockedItems.length,
+            readyItems,
+            lowStockItems,
+            outOfStockItems
+        });
     }
 
     function addToStock(item) {
@@ -651,7 +955,10 @@
         searchTerm.set('');
     }
 
-    onMount(loadData);
+    onMount(() => {
+        loadData();
+        debugAPIStructure(); // Debug API structure
+    });
 
     $: ({ items, loading: storeLoading } = $stockStore);
     $: isLoading = loading || storeLoading;
@@ -685,14 +992,41 @@
     // Update total items berdasarkan hasil filter
     $: totalFilteredItems = filteredReceivedItems.length;
 
-    // Paginated items berdasarkan hasil filter
+    // Group by procurement_id first, then paginate
+    $: groupedByProcurement = filteredReceivedItems.reduce((groups, item) => {
+        const procurementId = item.procurement_id;
+        if (!groups[procurementId]) {
+            groups[procurementId] = [];
+        }
+        groups[procurementId].push(item);
+        return groups;
+    }, {});
+
+    // Convert to array of groups for pagination
+    $: procurementGroups = Object.keys(groupedByProcurement).map(procurementId => {
+        const items = groupedByProcurement[procurementId];
+        const firstItem = items[0];
+        return {
+            procurement_id: procurementId,
+            nama_pengaju: firstItem.nama_pengaju,
+            date_created: firstItem.date_created,
+            urgency: firstItem.urgency,
+            metode_pembayaran: firstItem.metode_pembayaran,
+            tujuan_pengajuan: firstItem.tujuan_pengajuan,
+            status: firstItem.status,
+            items: items
+        };
+    });
+
+    // Paginated groups (not individual items)
     $: {
-        const start = (currentPage - 1) * itemsPerPage;
-        const end = start + itemsPerPage;
-        paginatedItems = filteredReceivedItems.slice(start, end);
+        const itemsPerGroup = 5; // Show 5 procurement groups per page
+        const start = (currentPage - 1) * itemsPerGroup;
+        const end = start + itemsPerGroup;
+        paginatedItems = procurementGroups.slice(start, end);
 
         // Reset ke halaman 1 jika current page melebihi total pages setelah filter
-        const maxPages = Math.ceil(totalFilteredItems / itemsPerPage);
+        const maxPages = Math.ceil(procurementGroups.length / itemsPerGroup);
         if (currentPage > maxPages && maxPages > 0) {
             currentPage = 1;
         }
@@ -700,7 +1034,8 @@
 
     // Helper untuk paginasi dengan "..."
     function getPageNumbers() {
-        const totalPages = Math.ceil(totalFilteredItems / itemsPerPage);
+        const itemsPerGroup = 5;
+        const totalPages = Math.ceil(procurementGroups.length / itemsPerGroup);
         const maxPagesToShow = 10;
         let pages = [];
 
@@ -1130,97 +1465,174 @@
             {/if}
         </div>
 
-        <!-- Tabel Barang Diterima - DIUBAH -->
+        <!-- Barang Diterima - Card Layout -->
         <div class="mt-8">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex justify-between items-center mb-6">
                 <h2 class="text-xl font-bold text-gray-900">Barang Diterima</h2>
                 <div class="text-sm text-gray-600">
-                    {totalFilteredItems} dari {barangDiterimaItems.length} barang
+                    {procurementGroups.length} procurement ({totalFilteredItems} items total)
                 </div>
             </div>
             
             {#if totalFilteredItems > 0}
-                <div class="bg-white rounded-lg shadow overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full border-collapse">
-                            <thead>
-                                <tr class="bg-gray-50 border-b border-gray-200">
-                                    <th class="p-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Nama Pengaju
-                                    </th>
-                                    <th class="p-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Nama Barang
-                                    </th>
-                                    <th class="p-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Status
-                                    </th>
-                                    <th class="p-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Aksi
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                {#each paginatedItems as item}
-                                    <tr class="hover:bg-gray-50 transition-colors">
-                                        <td class="p-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {item.nama_pengaju || '-'}
-                                        </td>
-                                        <td class="p-4 whitespace-nowrap text-sm text-gray-700">
-                                            {item.nama_barang || '-'}
-                                        </td>
-                                        <td class="p-4 whitespace-nowrap">
-                                            <span class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                {item.status}
-                                            </span>
-                                        </td>
-                                        <td class="p-4 whitespace-nowrap space-x-2">
-                                            <button
-                                                on:click={() => quickAddToStock({
-                                                    id: item.id,
-                                                    name: item.nama_barang,
-                                                    nama_pengaju: item.nama_pengaju,
-                                                    status: item.status
-                                                })}
-                                                class="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md text-xs font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-                                                disabled={addedToStockIds.includes(item.id)}
-                                            >
-                                                {#if addedToStockIds.includes(item.id)}
-                                                    ✓ Sudah Ditambah
-                                                {:else}
-                                                    🚀 Quick Add
-                                                {/if}
-                                            </button>
-                                            <button
-                                                on:click={() => addToStock({
-                                                    id: item.id,
-                                                    name: item.nama_barang,
-                                                    nama_pengaju: item.nama_pengaju,
-                                                    status: item.status
-                                                })}
-                                                class="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                                                disabled={addedToStockIds.includes(item.id)}
-                                            >
-                                                {#if addedToStockIds.includes(item.id)}
-                                                    ✓ Sudah Ditambah
-                                                {:else}
-                                                    + Tambah ke Stok
-                                                {/if}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                {/each}
-                            </tbody>
-                        </table>
+                <!-- Display grouped procurement cards -->
+                {#each paginatedItems as procurement}
+                    <div class="bg-white rounded-lg shadow-md border border-gray-200 mb-6 overflow-hidden">
+                        <!-- Header Card -->
+                        <div class="bg-gray-50 border-b border-gray-200 px-6 py-4">
+                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <span class="text-sm font-medium text-gray-500">ID Procurement:</span>
+                                        <span class="font-mono text-lg font-bold text-gray-900">{procurement.procurement_id}</span>
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            {procurement.status}
+                                        </span>
+                                    </div>
+                                    <div class="text-lg font-semibold text-gray-900 mb-1">{procurement.nama_pengaju}</div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button class="text-blue-600 hover:text-blue-800 p-1 rounded" title="Refresh" aria-label="Refresh data">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Info Grid -->
+                        <div class="px-6 py-4 bg-white">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-gray-500 mb-1">Departemen</span>
+                                    <span class="font-medium text-gray-900">IT</span>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-gray-500 mb-1">Urgency</span>
+                                    <span class="inline-flex items-center w-fit px-2 py-1 rounded text-xs font-medium"
+                                          class:bg-red-100={procurement.urgency === 'Very Urgent'}
+                                          class:text-red-800={procurement.urgency === 'Very Urgent'}
+                                          class:bg-yellow-100={procurement.urgency === 'Urgent'}
+                                          class:text-yellow-800={procurement.urgency === 'Urgent'}
+                                          class:bg-green-100={procurement.urgency === 'Normal'}
+                                          class:text-green-800={procurement.urgency === 'Normal'}>
+                                        {procurement.urgency}
+                                    </span>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-gray-500 mb-1">Metode Pembayaran</span>
+                                    <span class="font-medium text-gray-900">{procurement.metode_pembayaran}</span>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-gray-500 mb-1">Tujuan Pengajuan</span>
+                                    <span class="font-medium text-gray-900">{procurement.tujuan_pengajuan}</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-sm text-gray-500 mb-1">Tanggal Dibutuhkan</span>
+                                <span class="font-medium text-gray-900">{formatDate(procurement.date_created)}</span>
+                            </div>
+                        </div>
+
+                        <!-- Items Table -->
+                        <div class="border-t border-gray-200">
+                            <div class="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="text-sm font-medium text-gray-900">Daftar Item</h3>
+                                    <button class="text-blue-600 hover:text-blue-800 text-xs" title="Sinkronkan Status">
+                                        🔄 Sinkronkan Status
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="w-full">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Nama Barang
+                                            </th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Qty
+                                            </th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Satuan
+                                            </th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Aksi
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        {#each procurement.items as item}
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                    {item.nama_barang}
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                                    {item.quantity}
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                                    {item.unit}
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap space-x-2">
+                                                    <!-- Direct Add to Stock Button -->
+                                                    <button
+                                                        on:click={() => handleDirectAddToStock({
+                                                            id: item.id,
+                                                            nama_barang: item.nama_barang,
+                                                            nama_pengaju: item.nama_pengaju,
+                                                            status: item.status,
+                                                            quantity: item.quantity,
+                                                            unit: item.unit
+                                                        })}
+                                                        class="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md text-xs font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                                                        disabled={addedToStockIds.includes(item.id)}
+                                                    >
+                                                        {#if addedToStockIds.includes(item.id)}
+                                                            ✓ Sudah Di Stok
+                                                        {:else}
+                                                            � Tambah Stock
+                                                        {/if}
+                                                    </button>
+                                                    
+                                                    <!-- Advanced Add Button -->
+                                                    <button
+                                                        on:click={() => addToStock({
+                                                            id: item.id,
+                                                            name: item.nama_barang,
+                                                            nama_pengaju: item.nama_pengaju,
+                                                            status: item.status,
+                                                            quantity: item.quantity,
+                                                            unit: item.unit
+                                                        })}
+                                                        class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                                                        disabled={addedToStockIds.includes(item.id)}
+                                                    >
+                                                        {#if addedToStockIds.includes(item.id)}
+                                                            ✓ Sudah Ditambah
+                                                        {:else}
+                                                            ⚙️ Advanced
+                                                        {/if}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        {/each}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                {/each}
 
                 <!-- Paginasi untuk Barang Diterima -->
                 <div class="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4">
                     <div class="text-sm text-gray-600">
-                        Menampilkan {Math.min((currentPage - 1) * itemsPerPage + 1, totalFilteredItems)} - {Math.min(
-                            currentPage * itemsPerPage,
-                            totalFilteredItems
-                        )} dari {totalFilteredItems} barang
+                        Menampilkan {Math.min((currentPage - 1) * 5 + 1, procurementGroups.length)} - {Math.min(
+                            currentPage * 5,
+                            procurementGroups.length
+                        )} dari {procurementGroups.length} procurement ({totalFilteredItems} items total)
                         {#if $searchTerm}
                             <span class="text-blue-600">(hasil pencarian)</span>
                         {/if}
@@ -1254,9 +1666,9 @@
                         {/each}
                         <button
                             on:click={() => changePage(currentPage + 1)}
-                            disabled={currentPage === Math.ceil(totalFilteredItems / itemsPerPage)}
+                            disabled={currentPage === Math.ceil(procurementGroups.length / 5)}
                             class="px-3 py-2 text-sm font-medium rounded-md border transition-colors {currentPage ===
-                            Math.ceil(totalFilteredItems / itemsPerPage)
+                            Math.ceil(procurementGroups.length / 5)
                                 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                                 : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'}"
                         >
