@@ -168,7 +168,8 @@
 							console.log('✅ Matched finished good:', {
 								id: matchingFinishedGood.id,
 								kode_barang: matchingFinishedGood.kode_barang,
-								nama_barang: matchingFinishedGood.nama_barang
+								nama_barang: matchingFinishedGood.nama_barang,
+								sisa_stok: matchingFinishedGood.sisa_stok
 							});
 						} else {
 							console.log('❌ No matching finished good found');
@@ -179,7 +180,7 @@
 						
 						const resultItem = {
 							finish_good_id: matchingFinishedGood ? matchingFinishedGood.id.toString() : '',
-							finish_good_name: item.nama_barang || '',
+							finish_good_name: matchingFinishedGood ? matchingFinishedGood.nama_barang : (item.nama_barang || ''),
 							raw_material_id: '',
 							raw_material_name: '',
 							consumable_sparepart_id: '',
@@ -188,7 +189,10 @@
 							warna: item.warna || matchingFinishedGood?.warna || '',
 							kemasan: item.kemasan || matchingFinishedGood?.kemasan || '',
 							satuan: item.satuan || matchingFinishedGood?.satuan || 'pcs',
-							quantity: item.qty || 1
+							quantity: parseInt(item.qty) || 1, // Ensure quantity is a number
+							harga: parseFloat(item.harga) || 0,
+							diskon: 0,
+							total_harga: (parseInt(item.qty) || 1) * (parseFloat(item.harga) || 0)
 						};
 						
 						console.log('Final item result:', resultItem);
@@ -1156,33 +1160,42 @@
 			let insufficientStock = false;
 			const stockErrors = [];
 
+			console.log('=== CHECKING STOCK AVAILABILITY ===');
 			validItems.forEach((item) => {
+				console.log(`Checking stock for item:`, item);
+				
 				if (item.finish_good_id) {
-					const finishGood = finishedGoods.find((fg) => fg.id === item.finish_good_id);
+					const finishGood = finishedGoods.find((fg) => fg.id.toString() === item.finish_good_id.toString());
+					console.log(`Finished good check - ID: ${item.finish_good_id}, Found:`, finishGood ? {
+						name: finishGood.nama_barang,
+						stock: finishGood.sisa_stok,
+						needed: item.quantity
+					} : 'NOT FOUND');
+					
 					if (finishGood && finishGood.sisa_stok < item.quantity) {
 						insufficientStock = true;
 						stockErrors.push(
-							`Stok ${finishGood.nama_barang} tidak mencukupi (${finishGood.sisa_stok} tersedia)`
+							`Stok ${finishGood.nama_barang} tidak mencukupi (${finishGood.sisa_stok} tersedia, ${item.quantity} diperlukan)`
 						);
 					}
 				}
 				if (item.raw_material_id) {
-					const rawMaterial = rawMaterials.find((rm) => rm.id === item.raw_material_id);
+					const rawMaterial = rawMaterials.find((rm) => rm.id.toString() === item.raw_material_id.toString());
 					if (rawMaterial && rawMaterial.sisa_stok < item.quantity) {
 						insufficientStock = true;
 						stockErrors.push(
-							`Stok ${rawMaterial.nama_barang} tidak mencukupi (${rawMaterial.sisa_stok} tersedia)`
+							`Stok ${rawMaterial.nama_barang} tidak mencukupi (${rawMaterial.sisa_stok} tersedia, ${item.quantity} diperlukan)`
 						);
 					}
 				}
 				if (item.consumable_sparepart_id) {
 					const consumable = consumableSpareparts.find(
-						(cs) => cs.id === item.consumable_sparepart_id
+						(cs) => cs.id.toString() === item.consumable_sparepart_id.toString()
 					);
 					if (consumable && consumable.sisa_stok < item.quantity) {
 						insufficientStock = true;
 						stockErrors.push(
-							`Stok ${consumable.nama} tidak mencukupi (${consumable.sisa_stok} tersedia)`
+							`Stok ${consumable.nama} tidak mencukupi (${consumable.sisa_stok} tersedia, ${item.quantity} diperlukan)`
 						);
 					}
 				}
@@ -1247,30 +1260,60 @@
 			}
 
 			// Update stock for finished goods, raw materials, and consumable & sparepart
+			console.log('=== UPDATING STOCK ===');
+			console.log('Valid items for stock update:', validItems);
+			
 			for (const item of validItems) {
+				console.log(`\n--- Processing stock update for item ---`);
+				console.log('Item data:', item);
+				
 				if (item.finish_good_id && item.quantity > 0) {
-					const finishGood = finishedGoods.find((fg) => fg.id === item.finish_good_id);
+					console.log(`Searching for finished good with ID: ${item.finish_good_id} (type: ${typeof item.finish_good_id})`);
+					
+					// Convert IDs to consistent type for comparison
+					const finishGood = finishedGoods.find((fg) => 
+						fg.id.toString() === item.finish_good_id.toString()
+					);
+					
+					console.log('Found finished good:', finishGood ? {
+						id: finishGood.id,
+						nama_barang: finishGood.nama_barang,
+						current_stock: finishGood.sisa_stok,
+						qty_to_reduce: item.quantity
+					} : 'NOT FOUND');
+					
 					if (finishGood) {
 						const newStock = Math.max(0, finishGood.sisa_stok - item.quantity);
+						console.log(`Stock update: ${finishGood.sisa_stok} - ${item.quantity} = ${newStock}`);
+						
 						await updateFinishedGoodStock(item.finish_good_id, newStock);
+						console.log(`✅ Stock updated successfully for ${finishGood.nama_barang}`);
+						
+						// Update local data immediately
+						const localItem = finishedGoods.find(fg => fg.id.toString() === item.finish_good_id.toString());
+						if (localItem) {
+							localItem.sisa_stok = newStock;
+						}
 					}
 				}
 
 				if (item.raw_material_id && item.quantity > 0) {
-					const rawMaterial = rawMaterials.find((rm) => rm.id === item.raw_material_id);
+					const rawMaterial = rawMaterials.find((rm) => rm.id.toString() === item.raw_material_id.toString());
 					if (rawMaterial) {
 						const newStock = Math.max(0, rawMaterial.sisa_stok - item.quantity);
 						await updateRawMaterialStock(item.raw_material_id, newStock);
+						console.log(`✅ Raw material stock updated: ${rawMaterial.nama_barang}`);
 					}
 				}
 
 				if (item.consumable_sparepart_id && item.quantity > 0) {
 					const consumable = consumableSpareparts.find(
-						(cs) => cs.id === item.consumable_sparepart_id
+						(cs) => cs.id.toString() === item.consumable_sparepart_id.toString()
 					);
 					if (consumable) {
 						const newStock = Math.max(0, consumable.sisa_stok - item.quantity);
 						await updateConsumableStock(item.consumable_sparepart_id, newStock);
+						console.log(`✅ Consumable stock updated: ${consumable.nama}`);
 					}
 				}
 			}
@@ -1309,6 +1352,9 @@
 	// Helper function to update finished good stock
 	async function updateFinishedGoodStock(id, newStock) {
 		try {
+			console.log(`=== UPDATING FINISHED GOOD STOCK ===`);
+			console.log(`ID: ${id}, New Stock: ${newStock}`);
+			
 			const response = await fetch(`https://directus.eltamaprimaindo.com/items/finishgood/${id}`, {
 				method: 'PATCH',
 				headers: {
@@ -1321,10 +1367,16 @@
 			});
 
 			if (!response.ok) {
-				throw new Error('Failed to update finished good stock');
+				const errorData = await response.json();
+				console.error('Update stock response error:', errorData);
+				throw new Error(`Failed to update finished good stock: ${response.status} ${response.statusText}`);
 			}
+			
+			const result = await response.json();
+			console.log('✅ Stock update successful:', result);
 		} catch (error) {
-			console.error('Error updating finished good stock:', error);
+			console.error('❌ Error updating finished good stock:', error);
+			throw error; // Re-throw to handle in the calling function
 		}
 	}
 
